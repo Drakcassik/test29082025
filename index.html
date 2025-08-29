@@ -96,8 +96,10 @@
   thead th{position:sticky;top:0;background:#f7f8ff;border-bottom:1px solid var(--stroke);padding:10px;text-transform:uppercase;font-size:11px;color:#59607a}
   tbody td{padding:9px;border-bottom:1px solid var(--stroke);text-align:center}
   tbody tr:hover{background:#fbfcff}
-  td[contenteditable="true"]{outline:none}
-  td[contenteditable="true"]:focus{box-shadow:inset 0 0 0 2px var(--primary);border-radius:6px}
+  td[contenteditable="true"]{outline:none; cursor:text; transition:all 0.2s ease}
+  td[contenteditable="true"]:hover{background:#f8f9ff}
+  td[contenteditable="true"]:focus{box-shadow:inset 0 0 0 2px var(--primary);border-radius:6px; background:#fff}
+  td[contenteditable="true"]:empty:before{content:"Click to edit"; color:#ccc; font-style:italic}
   .bad{color:#fff;background:var(--danger);padding:2px 6px;border-radius:7px;font-size:11px}
   .warn{color:#fff;background:var(--warn);padding:2px 6px;border-radius:7px;font-size:11px}
   .ok{color:#fff;background:var(--ok);padding:2px 6px;border-radius:7px;font-size:11px}
@@ -152,6 +154,7 @@
       <a class="link" href="#rules">Rules</a>
       <a class="link" href="#history">History / Imports</a>
       <a class="link" href="#backup">Backup & Restore</a>
+      <a class="link" id="syncAirtable">🔄 Sync Airtable</a>
       <a class="link" id="clearAll">⚠️ Reset everything</a>
     </nav>
   </aside>
@@ -295,14 +298,14 @@
       </div>
     </div>
     <div class="reg-list">
-      <table id="regTable">
+              <table id="regTable">
         <thead>
           <tr>
-            <th>SKU</th><th>Status</th><th>Style</th><th>Material</th><th>Color</th><th>Size</th><th>Variant</th><th>Actions</th>
+            <th>SKU</th><th>Status</th><th>Name</th><th>Style</th><th>Material</th><th>Color</th><th>Size</th><th>Variant</th><th>Actions</th>
           </tr>
         </thead>
         <tbody id="regBody">
-          <tr><td colspan="8" style="padding:18px;color:var(--muted)">Empty registry.</td></tr>
+          <tr><td colspan="9" style="padding:18px;color:var(--muted)">Empty registry.</td></tr>
         </tbody>
       </table>
     </div>
@@ -547,7 +550,7 @@ async function commitSelected(){
     if(rules.uniqVariant && (registryCache.byVar.get(vkey)||[]).length>0) conflict=true;
     const status = conflict ? 'conflict' : 'active';
     toInsert.push({
-      sku: it.sku, product: it.row[0], style: it.row[1], material: it.row[2], color: it.row[3], size: it.row[4],
+      sku: it.sku, product: it.row[0] || '', style: it.row[1], material: it.row[2], color: it.row[3], size: it.row[4],
       variantKey: vkey, status, createdAt: Date.now()
     });
   });
@@ -589,13 +592,15 @@ function renderRegistry(){
               item.status==='draft' ? '<span class="badge">draft</span>' :
               '<span class="bad">conflict</span>';
     const tr=document.createElement('tr');
+    tr.setAttribute('data-id', item.id);
     tr.innerHTML=`
       <td><b style="${conf?'color:var(--danger)':''}">${item.sku}</b></td>
       <td>${st}</td>
-      <td>${item.style||''}</td>
-      <td>${item.material||''}</td>
-      <td>${item.color||''}</td>
-      <td>${item.size||''}</td>
+      <td contenteditable="true" data-field="product">${item.product||''}</td>
+      <td contenteditable="true" data-field="style">${item.style||''}</td>
+      <td contenteditable="true" data-field="material">${item.material||''}</td>
+      <td contenteditable="true" data-field="color">${item.color||''}</td>
+      <td contenteditable="true" data-field="size">${item.size||''}</td>
       <td class="small">${item.variantKey}</td>
       <td class="row-actions">
         <button class="btn secondary small" data-act="resolve" data-id="${item.id}">Resolve</button>
@@ -606,13 +611,82 @@ function renderRegistry(){
     body.appendChild(tr);
   });
 
+  // Add event listeners for editable fields
+  body.querySelectorAll('[contenteditable="true"]').forEach(td => {
+    td.addEventListener('blur', async () => {
+      const id = Number(td.closest('tr').dataset.id);
+      const field = td.dataset.field;
+      const newValue = td.textContent.trim();
+      
+      const item = registryCache.list.find(x => x.id === id);
+      if (!item || item[field] === newValue) return;
+      
+      item[field] = newValue;
+      await dbPut(item);
+      
+      // Update Airtable if configured
+      if (typeof __AT__ !== 'undefined' && __AT__.hasCfg() && item.atId) {
+        try {
+          await __AT__.updateOne(item.atId, { [field.charAt(0).toUpperCase() + field.slice(1)]: newValue });
+        } catch (e) {
+          console.warn('Airtable update failed:', e);
+        }
+      }
+      
+      showToast(`${field} updated`);
+    });
+  });
+
   body.querySelectorAll('[data-act]').forEach(b=>{
     b.addEventListener('click', async ()=>{
       const id=Number(b.dataset.id); const act=b.dataset.act;
       const item=registryCache.list.find(x=>x.id===id); if(!item) return;
-      if(act==='delete'){ await dbDelete(id); await refreshRegistry(); showToast('Deleted'); return; }
-      if(act==='activate'){ item.status='active'; await dbPut(item); await refreshRegistry(); return; }
-      if(act==='deactivate'){ item.status='inactive'; await dbPut(item); await refreshRegistry(); return; }
+      
+      if(act==='delete'){
+        // Delete from Airtable first if configured
+        if (typeof __AT__ !== 'undefined' && __AT__.hasCfg() && item.atId) {
+          try {
+            await __AT__.deleteOne(item.atId);
+          } catch (e) {
+            console.warn('Airtable delete failed:', e);
+          }
+        }
+        await dbDelete(id); 
+        await refreshRegistry(); 
+        showToast('Deleted'); 
+        return; 
+      }
+      
+      if(act==='activate'){ 
+        item.status='active'; 
+        await dbPut(item); 
+        // Update Airtable
+        if (typeof __AT__ !== 'undefined' && __AT__.hasCfg() && item.atId) {
+          try {
+            await __AT__.updateOne(item.atId, { Status: true });
+          } catch (e) {
+            console.warn('Airtable update failed:', e);
+          }
+        }
+        await refreshRegistry(); 
+        return; 
+      }
+      
+      if(act==='deactivate'){ 
+        item.status='inactive'; 
+        await dbPut(item); 
+        // Update Airtable
+        if (typeof __AT__ !== 'undefined' && __AT__.hasCfg() && item.atId) {
+          try {
+            await __AT__.updateOne(item.atId, { Status: false });
+          } catch (e) {
+            console.warn('Airtable update failed:', e);
+          }
+        }
+        await refreshRegistry(); 
+        return; 
+      }
+      
       if(act==='resolve'){
         const tryExpand=()=>{
           let w=[3,3,3,3];
@@ -639,7 +713,19 @@ function renderRegistry(){
         }
         item.sku=newSku;
         item.status='active';
-        await dbPut(item); await refreshRegistry(); showToast('Resolved');
+        await dbPut(item); 
+        
+        // Update Airtable
+        if (typeof __AT__ !== 'undefined' && __AT__.hasCfg() && item.atId) {
+          try {
+            await __AT__.updateOne(item.atId, { SKU: newSku, Status: true });
+          } catch (e) {
+            console.warn('Airtable update failed:', e);
+          }
+        }
+        
+        await refreshRegistry(); 
+        showToast('Resolved');
       }
     });
   });
@@ -809,11 +895,60 @@ async function init(){
   // history
   el('btnClearHistory').addEventListener('click', ()=>{ localStorage.removeItem(LS_HISTORY); renderHistory([]); });
 
+  // sync airtable
+  el('syncAirtable').addEventListener('click', async ()=>{
+    if (typeof __AT__ === 'undefined' || !__AT__.hasCfg()) {
+      showToast('Configure Airtable first');
+      return;
+    }
+    
+    try {
+      showToast('Syncing with Airtable...');
+      const json = await __AT__.list();
+      const incoming = (json.records||[]).map(mapFromFields);
+      
+      // Clear current registry and add all from Airtable
+      await dbClear();
+      if (incoming.length) {
+        await dbAddMany(incoming);
+        showToast(`Synced ${incoming.length} items from Airtable`);
+      } else {
+        showToast('No items found in Airtable');
+      }
+      
+      await refreshRegistry();
+    } catch (e) {
+      console.error('Airtable sync failed:', e);
+      showToast('Airtable sync failed');
+    }
+  });
+
   // reset
   el('clearAll').addEventListener('click', async ()=>{
-    if(!confirm('This will clear registry + all local settings. Proceed?')) return;
+    if(!confirm('This will clear registry + all local settings and sync with Airtable. Proceed?')) return;
+    
+    // Clear local registry
     await dbClear();
+    
+    // Clear all local settings
     [LS_ABBR,LS_STOP,LS_RULES,LS_HISTORY,LS_REGW].forEach(k=> localStorage.removeItem(k));
+    
+    // Sync with Airtable if configured
+    if (typeof __AT__ !== 'undefined' && __AT__.hasCfg()) {
+      try {
+        showToast('Syncing with Airtable...');
+        const json = await __AT__.list();
+        const incoming = (json.records||[]).map(mapFromFields);
+        if (incoming.length) {
+          await dbAddMany(incoming);
+          showToast(`Synced ${incoming.length} items from Airtable`);
+        }
+      } catch (e) {
+        console.warn('Airtable sync failed:', e);
+        showToast('Airtable sync failed, but local reset completed');
+      }
+    }
+    
     location.reload();
   });
 
@@ -891,6 +1026,7 @@ function downloadTemplate(){
   function mapToFields(item){
     return {
       SKU: item.sku || '',
+      Name: item.product || '',
       Style: item.style || '',
       Material: item.material || '',
       Color: item.color || '',
@@ -906,6 +1042,7 @@ function downloadTemplate(){
     return {
       atId: rec.id,
       sku: f.SKU||'',
+      product: f.Name||'',
       style: f.Style||'',
       material: f.Material||'',
       color: f.Color||'',
@@ -1157,7 +1294,7 @@ function downloadTemplate(){
         }
         if(toUpdate.length){
           const patches = toUpdate.map(x=>({ id: x.atId, fields: {
-            SKU: x.sku||'', Style: x.style||'', Material: x.material||'',
+            SKU: x.sku||'', Name: x.product||'', Style: x.style||'', Material: x.material||'',
             Color: x.color||'', Size: x.size||'', Variants: x.variantKey||'',
             Status: x.status==='active'
           }}));
