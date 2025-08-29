@@ -1,0 +1,1199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Boketto Tools · SKU Workbench</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --primary:#6F74FF; --primary-600:#5e63ec; --primary-50:#EEF0FF;
+    --bg:#f7f8ff; --card:#fff; --stroke:#e9ebf5; --shadow:0 8px 20px rgba(21,25,60,.08);
+    --text:#1b1c1e; --muted:#5f6470; --radius:16px;
+    --ok:#10b981; --warn:#f59e0b; --danger:#ef4444; --inactive:#9aa1b2;
+    --aside-w:280px; --reg-w:520px; /* <- largura do Registry (ajustada via drag) */
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;color:var(--text);
+    background:
+      radial-gradient(1000px 600px at 70% -10%, #e9ebff 0%, transparent 60%),
+      radial-gradient(900px 600px at -10% 10%, #f2f4ff 0%, transparent 50%),
+      var(--bg);
+  }
+  header{position:sticky;top:0;z-index:30;background:rgba(255,255,255,.7);backdrop-filter:blur(8px);border-bottom:1px solid var(--stroke)}
+  .head{width:100%;padding:14px 16px;display:flex;align-items:center;gap:10px}
+  .brand{display:flex;align-items:center;gap:10px}
+  .logo{width:36px;height:36px;border-radius:10px;background:linear-gradient(180deg,var(--primary),var(--primary-600));color:#fff;display:grid;place-items:center;font-weight:800}
+  h1{margin:0;font-size:18px;font-weight:800;letter-spacing:.2px}
+  .head-actions{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}
+  .btn{appearance:none;border:none;border-radius:12px;padding:9px 12px;font-weight:700;cursor:pointer}
+  .primary{color:#fff;background:linear-gradient(180deg,var(--primary),var(--primary-600));box-shadow:0 6px 14px rgba(111,116,255,.35)}
+  .ghost{background:#fff;border:1px solid var(--stroke)}
+  .secondary{background:#f5f6ff;border:1px solid var(--stroke)}
+  .btn.small{padding:6px 8px;font-weight:600;font-size:12px;border-radius:10px}
+  .btn:disabled{opacity:.6;cursor:not-allowed}
+  .btn:hover{transform:translateY(-1px)} .btn:active{transform:translateY(0)}
+
+  /* Layout 100% – agora com divisor entre centro e direita */
+  .app{width:100%;margin:16px 0 50px;display:grid;grid-template-columns:var(--aside-w) 1fr 8px var(--reg-w);gap:16px;padding:0 16px}
+  .app.collapsed{grid-template-columns:0 1fr 8px var(--reg-w)}
+  .app.reg-collapsed{grid-template-columns:var(--aside-w) 1fr 0 0}
+  .app.reg-max{grid-template-columns:var(--aside-w) 0 0 1fr}
+  @media (max-width:1100px){
+    .app{grid-template-columns:1fr}
+    .registry{order:3}
+    .splitter{display:none} /* sem divisor em mobile */
+    /* Sidebar vira overlay */
+    .aside{position:fixed;top:60px;left:0;bottom:0;width:var(--aside-w);z-index:40;transform:translateX(-102%);transition:.25s ease transform, .25s ease box-shadow}
+    body.menu-open .aside{transform:translateX(0);box-shadow:0 20px 50px rgba(0,0,0,.15)}
+  }
+
+  .splitter{
+    background:linear-gradient(180deg,#e9ebf7,#dde0fb);
+    border:1px solid var(--stroke);
+    border-left:none;border-right:none;
+    border-radius:10px;
+    cursor:col-resize; align-self:stretch;
+    box-shadow:inset 0 0 0 1px #eef;
+    position:relative;
+  }
+  .splitter:after{
+    content:"";
+    position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+    width:3px;height:32px;border-radius:2px;background:#c6cbff;
+    box-shadow:0 -10px 0 #d6daff,0 10px 0 #d6daff;
+  }
+
+  .card{background:var(--card);border:1px solid var(--stroke);border-radius:var(--radius);box-shadow:var(--shadow)}
+  .section{padding:16px 16px 6px}
+  h2.title{margin:0 0 10px;font-size:16px}
+  .sub{font-size:12px;color:var(--muted)}
+  .hr{height:1px;background:var(--stroke);margin:12px 0}
+
+  /* Aside (menu) – outra cor */
+  .aside{background:linear-gradient(180deg,#f0f2ff,#eef0ff);border-color:#dfe3ff}
+  .aside .nav{display:flex;flex-direction:column;padding:12px}
+  .nav .link{padding:10px 12px;border-radius:10px;border:1px solid #dfe3ff;background:#fff;margin-bottom:8px;text-decoration:none;color:var(--text);font-weight:600}
+  .nav .link.active{background:var(--primary-50);border-color:#cfd5ff}
+
+  /* Overlay mobile */
+  .overlay{position:fixed;inset:0;background:rgba(0,0,0,.28);display:none;z-index:35}
+  body.menu-open .overlay{display:block}
+
+  /* Generator */
+  .row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  @media (max-width:680px){ .row{grid-template-columns:1fr} }
+  textarea{width:100%;min-height:170px;border:1px solid var(--stroke);border-radius:12px;padding:12px;background:#fff}
+  input[type="text"]{border:1px solid var(--stroke);border-radius:10px;padding:8px 10px}
+  .pill{display:inline-flex;gap:6px;align-items:center;border:1px solid var(--stroke);border-radius:999px;padding:6px 10px;background:#fff;font-size:12px;color:#59607a}
+  .drop{border:1.5px dashed #cfd5ff;border-radius:12px;background:var(--primary-50);padding:16px;text-align:center;min-height:160px;display:grid;place-items:center}
+  .drop.drag{background:#e5e7ff;border-color:var(--primary)}
+  .toolbar{display:flex;gap:8px;flex-wrap:wrap;padding:10px}
+  .preview{max-height:380px;overflow:auto;border-top:1px solid var(--stroke)}
+  .work.expanded .preview{max-height:78vh} /* expandir tabela do gerador */
+  table{width:100%;border-collapse:collapse;background:#fff;font-size:13px}
+  thead th{position:sticky;top:0;background:#f7f8ff;border-bottom:1px solid var(--stroke);padding:10px;text-transform:uppercase;font-size:11px;color:#59607a}
+  tbody td{padding:9px;border-bottom:1px solid var(--stroke);text-align:center}
+  tbody tr:hover{background:#fbfcff}
+  td[contenteditable="true"]{outline:none}
+  td[contenteditable="true"]:focus{box-shadow:inset 0 0 0 2px var(--primary);border-radius:6px}
+  .bad{color:#fff;background:var(--danger);padding:2px 6px;border-radius:7px;font-size:11px}
+  .warn{color:#fff;background:var(--warn);padding:2px 6px;border-radius:7px;font-size:11px}
+  .ok{color:#fff;background:var(--ok);padding:2px 6px;border-radius:7px;font-size:11px}
+  .muted{color:#fff;background:var(--inactive);padding:2px 6px;border-radius:7px;font-size:11px}
+  .badge{padding:2px 6px;border-radius:7px;font-size:11px;border:1px solid var(--stroke)}
+  .note{font-size:12px;color:var(--muted);margin:6px 0}
+
+  /* Registry */
+  .reg-top{display:flex;gap:8px;flex-wrap:wrap;align-items:center;padding:10px 12px}
+  .reg-counters{display:flex;gap:8px;flex-wrap:wrap}
+  .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  @media (max-width:480px){ .grid-2{grid-template-columns:1fr} }
+  .small{font-size:12px}
+  .reg-list{max-height:58vh;overflow:auto;border-top:1px solid var(--stroke)}
+  .registry.expanded .reg-list{max-height:78vh} /* expandir lista da direita */
+  .row-actions{display:flex;gap:6px;justify-content:center;flex-wrap:wrap}
+  .skutable input[type="checkbox"]{transform:scale(1.1)}
+  .right{text-align:right}
+
+  /* Toast */
+  .toast{position:fixed;right:16px;bottom:16px;background:#fff;border:1px solid var(--stroke);padding:10px 12px;border-radius:10px;box-shadow:var(--shadow);display:none;z-index:60}
+  .toast.show{display:block;animation:fade .2s ease}
+  @keyframes fade{from{opacity:0;transform:translateY(6px)} to{opacity:1;transform:translateY(0)}}
+</style>
+</head>
+<body>
+<header>
+  <div class="head">
+    <button class="btn ghost" id="btnToggleMenu">☰ Menu</button>
+    <div class="brand">
+      <div class="logo">BK</div>
+      <h1>Boketto Tools · SKU Workbench</h1>
+    </div>
+    <div class="head-actions">
+      <button class="btn ghost" id="btnTemplateTop">Download template</button>
+      <button class="btn primary" id="btnDownloadTop" disabled>Download CSV</button>
+    </div>
+  </div>
+</header>
+
+<div class="app" id="app">
+  <!-- ====== LEFT: MENU ====== -->
+  <aside class="aside card" id="aside">
+    <div class="section">
+      <h2 class="title">Menu</h2>
+      <div class="sub">Workspace controls</div>
+    </div>
+    <div class="hr"></div>
+    <nav class="nav">
+      <a class="link active" href="#generator">Generator</a>
+      <a class="link" href="#registry">Registry</a>
+      <a class="link" href="#rules">Rules</a>
+      <a class="link" href="#history">History / Imports</a>
+      <a class="link" href="#backup">Backup & Restore</a>
+      <a class="link" id="clearAll">⚠️ Reset everything</a>
+    </nav>
+  </aside>
+
+  <!-- ====== CENTER: GENERATOR ====== -->
+  <main class="work card" id="generator">
+    <div class="section">
+      <h2 class="title">Generator (Style → Material → Color → Size)</h2>
+      <div class="sub">Product Name is kept as metadata only.</div>
+    </div>
+    <div class="hr"></div>
+
+    <div class="section">
+      <div class="row">
+        <div>
+          <div class="sub">Paste table (TAB or CSV)</div>
+          <textarea id="pasteInput" placeholder="Product Name[TAB]Style[TAB]Material[TAB]Color[TAB]Size"></textarea>
+          <div class="note" id="statsNote">Rows: 0 · Errors: 0</div>
+          <div class="toolbar">
+            <button class="btn primary" id="btnGenerate">Generate SKUs</button>
+            <button class="btn secondary" id="btnCopy">Copy table</button>
+            <button class="btn ghost" id="btnClear">Clear</button>
+            <button class="btn ghost small" id="btnExpandGenTable">Expand table</button>
+          </div>
+        </div>
+        <div>
+          <div class="sub">Upload Excel (.xlsx) or Drop</div>
+          <div class="drop" id="dropzone">Drop your .xlsx here or click</div>
+          <input type="file" id="excelFile" hidden accept=".xlsx"/>
+          <div class="toolbar">
+            <button class="btn primary" id="btnDownload" disabled>Download CSV</button>
+            <button class="btn ghost" id="btnTemplate">Download template</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="hr"></div>
+
+      <div id="rules" class="row">
+        <div>
+          <h3 class="title">Abbreviations</h3>
+          <div class="sub">One per line: <code>source:abbr</code> (case-insensitive). We still trim to 3–5 chars.</div>
+          <textarea id="abbrTextarea" placeholder="Leather:LTH&#10;Black:BLK&#10;Classic:CLA"></textarea>
+          <div class="toolbar">
+            <button class="btn primary" id="btnSaveAbbr">Save dictionary</button>
+            <button class="btn ghost" id="btnClearAbbr">Clear dictionary</button>
+          </div>
+        </div>
+        <div>
+          <h3 class="title">Stopwords</h3>
+          <div class="sub">Words to ignore before abbreviation. One per line (e.g., <em>the</em>, <em>and</em>, <em>bag</em>).</div>
+          <textarea id="stopTextarea" placeholder="the&#10;and&#10;of"></textarea>
+          <div class="toolbar">
+            <button class="btn primary" id="btnSaveStop">Save stopwords</button>
+            <button class="btn ghost" id="btnClearStop">Clear stopwords</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="hr"></div>
+
+      <div class="section">
+        <h3 class="title">Generation Rules</h3>
+        <div class="grid-2 small">
+          <label><input type="checkbox" id="chkAutoSizes"> Auto-generate size variants when “Size” is missing</label>
+          <div>Sizes list: <input id="sizesInput" type="text" value="S,M,L,XL" /></div>
+          <div>Duplicate strategy:
+            <label class="pill"><input type="radio" name="dup" value="increment" checked> increment -01</label>
+            <label class="pill"><input type="radio" name="dup" value="expand"> expand 3→5</label>
+            <label class="pill"><input type="radio" name="dup" value="auto"> auto</label>
+          </div>
+          <div>Uniqueness policy:
+            <label class="pill"><input type="checkbox" id="uniqSku" checked> unique by SKU</label>
+            <label class="pill"><input type="checkbox" id="uniqVariant" checked> unique by (S/M/C/Z)</label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="hr"></div>
+
+    <div class="section">
+      <div class="toolbar">
+        <button class="btn secondary" id="btnCommitSelected" disabled>Commit selected → Registry</button>
+        <button class="btn ghost" id="btnSelectAll" disabled>Select all</button>
+        <button class="btn ghost" id="btnCopySkusOnly" disabled>Copy SKUs only</button>
+      </div>
+      <div class="preview">
+        <table class="skutable" id="genTable">
+          <thead>
+            <tr>
+              <th><input type="checkbox" id="genSelectAll"></th>
+              <th>SKU</th><th>Status</th>
+              <th>Product Name</th><th>Style</th><th>Material</th><th>Color</th><th>Size</th>
+            </tr>
+          </thead>
+          <tbody id="genBody">
+            <tr><td colspan="8" style="padding:18px;color:var(--muted)">No data yet.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <!-- ====== SPLITTER (drag aqui para redimensionar) ====== -->
+  <div id="splitter" class="splitter" title="Drag to resize · Double-click to collapse/expand Registry"></div>
+
+  <!-- ====== RIGHT: REGISTRY ====== -->
+  <aside class="registry card" id="registry">
+    <div class="section" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <div style="flex:1 1 auto">
+        <h2 class="title" style="margin:0">Registry</h2>
+        <div class="sub">All committed SKUs (stored locally via IndexedDB)</div>
+      </div>
+      <div>
+        <button class="btn ghost small" id="btnHideReg" title="Collapse">Hide</button>
+        <button class="btn secondary small" id="btnRegFull" title="Registry full width">Full width</button>
+        <button class="btn ghost small" id="btnExpandRegList" title="Expand list height">Expand list</button>
+      </div>
+    </div>
+    <div class="reg-top">
+      <div class="reg-counters">
+        <span class="pill">Active: <b id="cActive">0</b></span>
+        <span class="pill">Inactive: <b id="cInactive">0</b></span>
+        <span class="pill">Conflicts: <b id="cConflict">0</b></span>
+        <span class="pill">Draft: <b id="cDraft">0</b></span>
+      </div>
+      <div class="at-toolbar" style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-left:8px">
+        <button class="btn small" id="btnAtSettings" title="Configurar Airtable">Airtable Settings</button>
+        <button class="btn secondary small" id="btnAtPull" title="Baixar SKUs do Airtable">Sync ←</button>
+        <button class="btn ghost small" id="btnAtPush" title="Enviar/Atualizar SKUs selecionados">Push →</button>
+        <span id="atStatus" class="pill" style="background:#eef1ff;color:#334;display:none"></span>
+      </div>
+    
+      <div class="right" style="margin-left:auto;display:flex;gap:8px;flex-wrap:wrap">
+        <input id="regSearch" type="text" placeholder="Search..." />
+        <label class="pill"><input type="checkbox" id="fActive" checked> active</label>
+        <label class="pill"><input type="checkbox" id="fInactive" checked> inactive</label>
+        <label class="pill"><input type="checkbox" id="fConflict" checked> conflict</label>
+        <label class="pill"><input type="checkbox" id="fDraft" checked> draft</label>
+      </div>
+    </div>
+    <div class="reg-list">
+      <table id="regTable">
+        <thead>
+          <tr>
+            <th>SKU</th><th>Status</th><th>Style</th><th>Material</th><th>Color</th><th>Size</th><th>Variant</th><th>Actions</th>
+          </tr>
+        </thead>
+        <tbody id="regBody">
+          <tr><td colspan="8" style="padding:18px;color:var(--muted)">Empty registry.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="hr"></div>
+
+    <div class="section" id="backup">
+      <h3 class="title">Backup & Restore</h3>
+      <div class="toolbar">
+        <button class="btn ghost" id="btnExportRegistry">Export JSON</button>
+        <button class="btn ghost" id="btnImportRegistry">Import JSON</button>
+        <input type="file" id="importFile" hidden accept=".json" />
+        <button class="btn ghost" id="btnClearRegistry">Clear registry</button>
+      </div>
+    </div>
+
+    <div class="hr"></div>
+
+    <div class="section" id="history">
+      <h3 class="title">History (last 5 imports)</h3>
+      <div id="historyList" class="grid-2"></div>
+      <div class="toolbar"><button class="btn ghost" id="btnClearHistory">Clear history</button></div>
+    </div>
+  </aside>
+</div>
+
+<!-- overlay mobile -->
+<div class="overlay" id="overlay"></div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* =========================== State & Storage =========================== */
+const LS_ABBR = 'bk_abbrev_dict_v2';
+const LS_STOP = 'bk_stopwords_v2';
+const LS_RULES = 'bk_rules_v2';
+const LS_HISTORY = 'bk_history_v2';
+const LS_REGW = 'bk_registry_width_px';
+
+let parsedData = [];     // Rows from paste/excel (5 cols)
+let computedRows = [];   // [{ sku, row, existsSku, existsVariant }]
+let abbrevMap = {};
+let stopwords = new Set();
+
+let registryCache = { list: [], bySku: new Map(), byVar: new Map() };
+
+/* =========================== Utils =========================== */
+const el = id => document.getElementById(id);
+const norm = s => String(s||'').trim();
+const lower = s => norm(s).toLowerCase();
+function debounce(fn, ms=350){ let t; return (...a)=>{ clearTimeout(t); t=setTimeout(()=>fn(...a), ms); }; }
+function showToast(m){ const t=el('toast'); t.textContent=m; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),1800); }
+function download(blob,name){ const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click(); a.remove(); }
+
+/* =========================== Dictionaries & Rules =========================== */
+function parseAbbr(text){
+  const map={}; text.split(/\r?\n/).forEach(line=>{
+    if(!line.trim()) return; const i=line.indexOf(':'); if(i<0) return;
+    const src=lower(line.slice(0,i)), ab=line.slice(i+1).trim(); if(!src||!ab) return; map[src]=ab;
+  }); return map;
+}
+function removeStop(str){
+  if(!stopwords.size) return str;
+  const tokens = norm(str).split(/[\s\-_/]+/).filter(Boolean);
+  return tokens.filter(t=>!stopwords.has(lower(t))).join(' ');
+}
+function slugN(str,n){
+  return norm(str).toUpperCase().replace(/[^A-Z0-9]/g,'').substring(0,Math.max(0,n));
+}
+function abbr(value, n){
+  const original = norm(value), cleaned = removeStop(original);
+  const cand = abbrevMap[lower(original)] || abbrevMap[lower(cleaned)] || cleaned || original;
+  return slugN(cand, n);
+}
+
+/* =========================== SKU (Style-first) =========================== */
+function baseSKU(row, widths=[3,3,3,3]){
+  return [
+    abbr(row[1], widths[0]),
+    abbr(row[2], widths[1]),
+    abbr(row[3], widths[2]),
+    abbr(row[4], widths[3]),
+  ].join('-');
+}
+function variantKey(row){ return [1,2,3,4].map(i=>lower(row[i])).join('|'); }
+
+/* =========================== Generator pipeline =========================== */
+function expandMissingSizes(rows, rules){
+  if(!rules.autoSizes || !rules.sizes.length) return rows.map(r=>r.slice(0,5));
+  const out=[];
+  rows.forEach(r=>{
+    const b=r.slice(0,5);
+    if(!norm(b[4])) rules.sizes.forEach(sz=> out.push([b[0],b[1],b[2],b[3],sz]));
+    else out.push(b);
+  });
+  return out;
+}
+function resolveDuplicates(baseSkus, rows, strategy){
+  const used = new Set(); const out=[];
+  const counts={}; const inc=base=>{ counts[base]=(counts[base]||0)+1; return base+'-'+String(counts[base]).padStart(2,'0'); };
+  function expand(row){
+    let w=[3,3,3,3];
+    for(let s=0;s<12;s++){
+      const b=baseSKU(row,w); if(!used.has(b)) return b;
+      let bumped=false; for(let i=0;i<4;i++){ if(w[i]<5){ w[i]++; bumped=true; break; } }
+      if(!bumped) break;
+    }
+    let b=baseSKU(row,w), c=b; while(used.has(c)) c=inc(b); return c;
+  }
+  baseSkus.forEach((b,i)=>{
+    let sku=b;
+    if(used.has(sku)){
+      if(strategy==='expand'||strategy==='auto') sku=expand(rows[i]);
+      if(used.has(sku)) sku=inc(b);
+    }
+    used.add(sku); out.push(sku);
+  });
+  return out;
+}
+function getRules(){
+  return {
+    autoSizes: el('chkAutoSizes').checked,
+    sizes: el('sizesInput').value.split(',').map(s=>norm(s)).filter(Boolean),
+    dupStrategy: document.querySelector('input[name="dup"]:checked')?.value || 'increment',
+    uniqSku: el('uniqSku').checked,
+    uniqVariant: el('uniqVariant').checked
+  };
+}
+function parsePasted(text){
+  if(!text) return [];
+  const lines=text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean);
+  return lines.map(line => (line.includes('\t') ? line.split('\t') : line.split(',')).map(v=>norm(v)).slice(0,5));
+}
+
+/* =========================== IndexedDB (Registry) =========================== */
+const DB_NAME='boketto_sku_db_v1', STORE='skus';
+let db;
+function dbOpen(){
+  return new Promise((resolve,reject)=>{
+    const req = indexedDB.open(DB_NAME,1);
+    req.onupgradeneeded = e=>{
+      const db=e.target.result;
+      const store = db.createObjectStore(STORE,{keyPath:'id',autoIncrement:true});
+      store.createIndex('sku','sku',{unique:false});
+      store.createIndex('variantKey','variantKey',{unique:false});
+      store.createIndex('status','status',{unique:false});
+    };
+    req.onsuccess = ()=>{ db=req.result; resolve(); };
+    req.onerror = ()=> reject(req.error);
+  });
+}
+function dbAll(){ return new Promise((res,rej)=>{ const tx=db.transaction(STORE,'readonly'); const st=tx.objectStore(STORE); const rq=st.getAll(); rq.onsuccess=()=>res(rq.result||[]); rq.onerror=()=>rej(rq.error); }); }
+function dbAddMany(items){
+  return new Promise((resolve,reject)=>{
+    const tx=db.transaction(STORE,'readwrite'); const st=tx.objectStore(STORE);
+    items.forEach(it=>st.add(it));
+    tx.oncomplete=()=>resolve(); tx.onerror=()=>reject(tx.error);
+  });
+}
+function dbPut(item){ return new Promise((res,rej)=>{ const tx=db.transaction(STORE,'readwrite'); const st=tx.objectStore(STORE); const rq=st.put(item); rq.onsuccess=()=>res(); rq.onerror=()=>rej(rq.error); }); }
+function dbDelete(id){ return new Promise((res,rej)=>{ const tx=db.transaction(STORE,'readwrite'); const st=tx.objectStore(STORE); const rq=st.delete(id); rq.onsuccess=()=>res(); rq.onerror=()=>rej(rq.error); }); }
+function dbClear(){ return new Promise((res,rej)=>{ const tx=db.transaction(STORE,'readwrite'); const st=tx.objectStore(STORE); const rq=st.clear(); rq.onsuccess=()=>res(); rq.onerror=()=>rej(rq.error); }); }
+
+/* refresh cache and render registry */
+async function refreshRegistry(){
+  const list = await dbAll();
+  const bySku=new Map(), byVar=new Map();
+  list.forEach(it=>{
+    if(!bySku.has(it.sku)) bySku.set(it.sku,[]);
+    bySku.get(it.sku).push(it);
+    if(!byVar.has(it.variantKey)) byVar.set(it.variantKey,[]);
+    byVar.get(it.variantKey).push(it);
+  });
+  registryCache={ list, bySku, byVar };
+  renderRegistry();
+  if(parsedData.length) renderGeneratorTable();
+}
+
+/* =========================== Generator UI =========================== */
+function renderGeneratorTable(){
+  const rules=getRules();
+  const rows5 = expandMissingSizes(parsedData,rules);
+  const baseSkus = rows5.map(r=>baseSKU(r,[3,3,3,3]));
+  const uniqueSkus = resolveDuplicates(baseSkus, rows5, rules.dupStrategy);
+  computedRows = rows5.map((r,i)=>{
+    const vkey = variantKey(r);
+    const existsSku = (registryCache.bySku.get(uniqueSkus[i])||[]).length>0;
+    const existsVar = (registryCache.byVar.get(vkey)||[]).length>0;
+    return { sku: uniqueSkus[i], row: r, existsSku, existsVariant: existsVar, selected:false };
+  });
+
+  const body=el('genBody'); body.innerHTML='';
+  if(!computedRows.length){ body.innerHTML='<tr><td colspan="8" style="padding:16px;color:var(--muted)">No data yet.</td></tr>'; setGenActions(false); el('statsNote').textContent='Rows: 0 · Errors: 0'; return; }
+
+  let errors=0;
+  computedRows.forEach((it,idx)=>{
+    const inv = [1,2,3,4].some(i=>!norm(it.row[i]));
+    if(inv) errors++;
+    const statusBadge = it.existsSku ? '<span class="bad">SKU exists</span>' :
+      it.existsVariant ? '<span class="warn">Variant exists</span>' : '<span class="ok">New</span>';
+    const tr=document.createElement('tr');
+    tr.innerHTML=`
+      <td><input type="checkbox" data-idx="${idx}" class="chk-row" ${inv?'disabled':''}></td>
+      <td><b>${it.sku}</b></td>
+      <td>${statusBadge}</td>
+      <td contenteditable="true" data-idx="${idx}" data-col="0">${it.row[0]||''}</td>
+      <td contenteditable="true" data-idx="${idx}" data-col="1">${it.row[1]||''}</td>
+      <td contenteditable="true" data-idx="${idx}" data-col="2">${it.row[2]||''}</td>
+      <td contenteditable="true" data-idx="${idx}" data-col="3">${it.row[3]||''}</td>
+      <td contenteditable="true" data-idx="${idx}" data-col="4">${it.row[4]||''}</td>`;
+    body.appendChild(tr);
+  });
+  el('statsNote').textContent=`Rows: ${computedRows.length} · Errors: ${errors}`;
+  setGenActions(true);
+
+  body.querySelectorAll('td[contenteditable="true"]').forEach(td=>{
+    td.addEventListener('input', ()=>{
+      const i=Number(td.dataset.idx), c=Number(td.dataset.col);
+      computedRows[i].row[c]=td.textContent.trim();
+      parsedData = computedRows.map(x=>x.row.slice(0,5));
+      renderGeneratorTable();
+    });
+  });
+  body.querySelectorAll('.chk-row').forEach(chk=>{
+    chk.addEventListener('change', ()=>{
+      const i=Number(chk.dataset.idx); computedRows[i].selected=chk.checked;
+    });
+  });
+}
+function setGenActions(state){
+  ['btnCommitSelected','btnSelectAll','btnCopySkusOnly','btnDownload','btnDownloadTop'].forEach(id=> el(id).disabled=!state);
+  el('genSelectAll').checked=false;
+}
+async function commitSelected(){
+  const sel = computedRows.filter(r=>r.selected && [1,2,3,4].every(i=>norm(r.row[i])));
+  if(!sel.length){ showToast('Select at least one valid row.'); return; }
+  const rules=getRules(); const toInsert=[];
+  sel.forEach(it=>{
+    const vkey=variantKey(it.row);
+    let conflict=false;
+    if(rules.uniqSku && (registryCache.bySku.get(it.sku)||[]).length>0) conflict=true;
+    if(rules.uniqVariant && (registryCache.byVar.get(vkey)||[]).length>0) conflict=true;
+    const status = conflict ? 'conflict' : 'active';
+    toInsert.push({
+      sku: it.sku, product: it.row[0], style: it.row[1], material: it.row[2], color: it.row[3], size: it.row[4],
+      variantKey: vkey, status, createdAt: Date.now()
+    });
+  });
+  await dbAddMany(toInsert);
+  await refreshRegistry();
+  showToast(`Committed ${toInsert.length} item(s)`);
+}
+
+/* =========================== Registry UI =========================== */
+function counters(){
+  const c={active:0,inactive:0,conflict:0,draft:0};
+  registryCache.list.forEach(i=> c[i.status] = (c[i.status]||0)+1 );
+  el('cActive').textContent=c.active||0;
+  el('cInactive').textContent=c.inactive||0;
+  el('cConflict').textContent=c.conflict||0;
+  el('cDraft').textContent=c.draft||0;
+}
+function rowHasConflict(item){
+  const othersSku=(registryCache.bySku.get(item.sku)||[]).filter(x=>x.id!==item.id);
+  const othersVar=(registryCache.byVar.get(item.variantKey)||[]).filter(x=>x.id!==item.id);
+  return (othersSku.length>0) || (othersVar.length>0);
+}
+function renderRegistry(){
+  counters();
+  const q=lower(el('regSearch').value);
+  const F={active:el('fActive').checked,inactive:el('fInactive').checked,conflict:el('fConflict').checked,draft:el('fDraft').checked};
+  const body=el('regBody'); body.innerHTML='';
+
+  const data=registryCache.list
+    .filter(i=>F[i.status])
+    .filter(i=> !q || [i.sku,i.style,i.material,i.color,i.size].join(' ').toLowerCase().includes(q));
+
+  if(!data.length){ body.innerHTML='<tr><td colspan="8" style="padding:16px;color:var(--muted)">No items.</td></tr>'; return; }
+
+  data.sort((a,b)=>b.createdAt-a.createdAt).forEach(item=>{
+    const conf=rowHasConflict(item);
+    const st = item.status==='active' ? '<span class="ok">active</span>' :
+              item.status==='inactive' ? '<span class="muted">inactive</span>' :
+              item.status==='draft' ? '<span class="badge">draft</span>' :
+              '<span class="bad">conflict</span>';
+    const tr=document.createElement('tr');
+    tr.innerHTML=`
+      <td><b style="${conf?'color:var(--danger)':''}">${item.sku}</b></td>
+      <td>${st}</td>
+      <td>${item.style||''}</td>
+      <td>${item.material||''}</td>
+      <td>${item.color||''}</td>
+      <td>${item.size||''}</td>
+      <td class="small">${item.variantKey}</td>
+      <td class="row-actions">
+        <button class="btn secondary small" data-act="resolve" data-id="${item.id}">Resolve</button>
+        ${item.status!=='active' ? `<button class="btn primary small" data-act="activate" data-id="${item.id}">Activate</button>`:''}
+        ${item.status!=='inactive' ? `<button class="btn ghost small" data-act="deactivate" data-id="${item.id}">Deactivate</button>`:''}
+        <button class="btn ghost small" data-act="delete" data-id="${item.id}">Delete</button>
+      </td>`;
+    body.appendChild(tr);
+  });
+
+  body.querySelectorAll('[data-act]').forEach(b=>{
+    b.addEventListener('click', async ()=>{
+      const id=Number(b.dataset.id); const act=b.dataset.act;
+      const item=registryCache.list.find(x=>x.id===id); if(!item) return;
+      if(act==='delete'){ await dbDelete(id); await refreshRegistry(); showToast('Deleted'); return; }
+      if(act==='activate'){ item.status='active'; await dbPut(item); await refreshRegistry(); return; }
+      if(act==='deactivate'){ item.status='inactive'; await dbPut(item); await refreshRegistry(); return; }
+      if(act==='resolve'){
+        const tryExpand=()=>{
+          let w=[3,3,3,3];
+          for(let s=0;s<12;s++){
+            const candidate = [
+              abbr(item.style, w[0]),
+              abbr(item.material, w[1]),
+              abbr(item.color, w[2]),
+              abbr(item.size, w[3]),
+            ].join('-');
+            const conf = (registryCache.bySku.get(candidate)||[]).some(x=>x.id!==item.id);
+            if(!conf) return candidate;
+            let bumped=false; for(let i=0;i<4;i++){ if(w[i]<5){ w[i]++; bumped=true; break; } }
+            if(!bumped) break;
+          }
+          return null;
+        };
+        let newSku = tryExpand();
+        if(!newSku){
+          const base = baseSKU([item.product,item.style,item.material,item.color,item.size],[3,3,3,3]);
+          let n=1, cand=base+'-'+String(n).padStart(2,'0');
+          while((registryCache.bySku.get(cand)||[]).some(x=>x.id!==item.id)){ n++; cand=base+'-'+String(n).padStart(2,'0'); }
+          newSku=cand;
+        }
+        item.sku=newSku;
+        item.status='active';
+        await dbPut(item); await refreshRegistry(); showToast('Resolved');
+      }
+    });
+  });
+}
+
+/* =========================== Exports/Imports =========================== */
+function exportRegistry(){
+  const out = JSON.stringify(registryCache.list, null, 2);
+  download(new Blob([out],{type:'application/json'}), 'boketto_registry.json');
+}
+function importRegistry(file){
+  const reader=new FileReader();
+  reader.onload=async e=>{
+    try{
+      const arr=JSON.parse(e.target.result||'[]');
+      await dbAddMany(arr.map(x=>{
+        const y=Object.assign({},x); delete y.id; y.createdAt = y.createdAt || Date.now(); y.variantKey = y.variantKey || [lower(y.style),lower(y.material),lower(y.color),lower(y.size)].join('|'); return y;
+      }));
+      await refreshRegistry(); showToast('Registry imported');
+    }catch{ showToast('Invalid JSON'); }
+  };
+  reader.readAsText(file);
+}
+
+/* =========================== History =========================== */
+function addHistory(){
+  const hist = JSON.parse(localStorage.getItem(LS_HISTORY) || '[]');
+  if(!parsedData.length) return renderHistory(hist);
+  const item={ id:Date.now(), ts:new Date().toISOString(), count:parsedData.length, data:parsedData };
+  const list=[item, ...hist].slice(0,5); localStorage.setItem(LS_HISTORY, JSON.stringify(list));
+  renderHistory(list);
+}
+function renderHistory(list){
+  const box=el('historyList'); box.innerHTML='';
+  (list||[]).forEach(it=>{
+    const d=new Date(it.ts);
+    const div=document.createElement('div'); div.className='card section';
+    div.innerHTML=`<div><b>${d.toLocaleString()}</b><div class="sub">${it.count} base rows</div>
+      <div class="toolbar"><button class="btn secondary small" data-load="${it.id}">Load</button></div></div>`;
+    box.appendChild(div);
+  });
+  box.querySelectorAll('[data-load]').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+      const id=Number(btn.dataset.load);
+      const all=JSON.parse(localStorage.getItem(LS_HISTORY)||'[]');
+      const found=all.find(x=>x.id===id); if(!found) return;
+      parsedData=found.data; el('pasteInput').value = parsedData.map(r=>r.join('\t')).join('\n');
+      renderGeneratorTable(); showToast('Loaded dataset from history');
+    });
+  });
+}
+
+/* =========================== Import/Upload =========================== */
+function handleWorkbook(arr){
+  const wb=XLSX.read(new Uint8Array(arr),{type:'array'});
+  const sh=wb.Sheets[wb.SheetNames[0]];
+  let json=XLSX.utils.sheet_to_json(sh,{header:1});
+  if(json[0] && json[0].join(',').toLowerCase().includes('product')) json.shift();
+  parsedData = json.map(r=>r.slice(0,5).map(v=>norm(v)));
+  renderGeneratorTable(); addHistory(); showToast(`Loaded ${parsedData.length} rows`);
+}
+
+/* =========================== CSV/Excel from generator =========================== */
+function genRowsWithSku(){ return computedRows.map(({sku,row})=>[sku, ...row.slice(0,5)]); }
+function downloadCSV(){
+  if(!computedRows.length) return;
+  let csv="SKU,Product Name,Style,Material,Color,Size\n";
+  genRowsWithSku().forEach(r=>{
+    const safe=r.map(v=>{ const s=String(v??''); return /[",\n]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s; });
+    csv+=safe.join(',')+"\n";
+  });
+  download(new Blob([csv],{type:'text/csv;charset=utf-8;'}),`boketto_skus_${new Date().toISOString().slice(0,10)}.csv`);
+  showToast('CSV downloaded');
+}
+function exportXLSX(){
+  const rows=[["SKU","Product Name","Style","Material","Color","Size"], ...genRowsWithSku()];
+  const ws=XLSX.utils.aoa_to_sheet(rows); const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'SKUs');
+  const out=XLSX.write(wb,{bookType:'xlsx',type:'array'});
+  download(new Blob([out],{type:'application/octet-stream'}),`boketto_skus_${Date.now()}.xlsx`);
+}
+function exportJSON(){
+  const rows=computedRows.map(({sku,row})=>({sku,product:row[0],style:row[1],material:row[2],color:row[3],size:row[4]}));
+  download(new Blob([JSON.stringify(rows,null,2)],{type:'application/json'}),`boketto_skus_${Date.now()}.json`);
+}
+
+/* =========================== Live bindings & init =========================== */
+function setExportsEnabled(state){ ['btnDownload','btnDownloadTop','btnCopySkusOnly'].forEach(id=>el(id).disabled=!state); }
+function copyTable(){ if(!computedRows.length){showToast('Nothing to copy');return;} const t=genRowsWithSku().map(r=>r.join('\t')).join('\n'); navigator.clipboard.writeText(t).then(()=>showToast('Table copied')); }
+function copySkusOnly(){ if(!computedRows.length){showToast('Nothing');return;} navigator.clipboard.writeText(computedRows.map(x=>x.sku).join('\n')).then(()=>showToast('SKUs copied')); }
+
+function persistRules(){
+  localStorage.setItem(LS_RULES, JSON.stringify(getRules()));
+  if(parsedData.length) renderGeneratorTable();
+}
+
+async function init(){
+  await dbOpen(); await refreshRegistry();
+
+  // load abbr/stopwords/rules/history
+  try{ abbrevMap = JSON.parse(localStorage.getItem(LS_ABBR)||'{}') || {}; }catch{}
+  try{ stopwords = new Set(JSON.parse(localStorage.getItem(LS_STOP)||'[]')||['the','and','of']); }catch{ stopwords=new Set(['the','and','of']); }
+  el('abbrTextarea').value = Object.entries(abbrevMap).map(([k,v])=>`${k}:${v}`).join('\n');
+  el('stopTextarea').value = Array.from(stopwords).join('\n');
+
+  const rules = JSON.parse(localStorage.getItem(LS_RULES)||'null') || {autoSizes:false, sizes:'S,M,L,XL', dupStrategy:'increment', uniqSku:true, uniqVariant:true};
+  el('chkAutoSizes').checked=!!rules.autoSizes;
+  el('sizesInput').value=rules.sizes;
+  document.querySelectorAll('input[name="dup"]').forEach(r=> r.checked=(r.value===rules.dupStrategy));
+  el('uniqSku').checked = rules.uniqSku!==false;
+  el('uniqVariant').checked = rules.uniqVariant!==false;
+
+  renderHistory(JSON.parse(localStorage.getItem(LS_HISTORY)||'[]'));
+
+  // events
+  el('btnGenerate').addEventListener('click', ()=>{ parsedData=parsePasted(el('pasteInput').value); renderGeneratorTable(); addHistory(); });
+  el('btnClear').addEventListener('click', ()=>{ parsedData=[]; computedRows=[]; el('genBody').innerHTML='<tr><td colspan="8" style="padding:16px;color:var(--muted)">No data yet.</td></tr>'; setExportsEnabled(false); el('statsNote').textContent='Rows: 0 · Errors: 0'; });
+  el('btnCopy').addEventListener('click', copyTable);
+  el('btnCopySkusOnly').addEventListener('click', copySkusOnly);
+  el('btnDownload').addEventListener('click', downloadCSV);
+  el('btnDownloadTop').addEventListener('click', downloadCSV);
+  el('btnTemplate').addEventListener('click', ()=>downloadTemplate());
+  el('btnTemplateTop').addEventListener('click', ()=>downloadTemplate());
+
+  // rules live
+  const liveAbbr=debounce(()=>{ abbrevMap=parseAbbr(el('abbrTextarea').value); localStorage.setItem(LS_ABBR, JSON.stringify(abbrevMap)); if(parsedData.length) renderGeneratorTable(); });
+  el('abbrTextarea').addEventListener('input', liveAbbr);
+  el('btnSaveAbbr').addEventListener('click', ()=>{ liveAbbr(); showToast('Dictionary saved'); });
+  el('btnClearAbbr').addEventListener('click', ()=>{ el('abbrTextarea').value=''; abbrevMap={}; localStorage.setItem(LS_ABBR,'{}'); if(parsedData.length) renderGeneratorTable(); showToast('Dictionary cleared'); });
+
+  const liveStop=debounce(()=>{ stopwords=new Set(el('stopTextarea').value.split(/\r?\n/).map(s=>lower(s)).filter(Boolean)); localStorage.setItem(LS_STOP, JSON.stringify(Array.from(stopwords))); if(parsedData.length) renderGeneratorTable(); });
+  el('stopTextarea').addEventListener('input', liveStop);
+  el('btnSaveStop').addEventListener('click', ()=>{ liveStop(); showToast('Stopwords saved'); });
+  el('btnClearStop').addEventListener('click', ()=>{ el('stopTextarea').value=''; stopwords=new Set(); localStorage.setItem(LS_STOP,'[]'); if(parsedData.length) renderGeneratorTable(); showToast('Stopwords cleared'); });
+
+  ['chkAutoSizes','uniqSku','uniqVariant'].forEach(id=> el(id).addEventListener('change', persistRules));
+  el('sizesInput').addEventListener('input', debounce(persistRules, 300));
+  document.querySelectorAll('input[name="dup"]').forEach(r=> r.addEventListener('change', persistRules));
+
+  // generator selections
+  el('btnSelectAll').addEventListener('click', ()=>{ document.querySelectorAll('#genBody .chk-row:not(:disabled)').forEach(c=>{c.checked=true; const i=Number(c.dataset.idx); computedRows[i].selected=true; }); });
+  el('genSelectAll').addEventListener('change', (e)=>{ const state=e.target.checked; document.querySelectorAll('#genBody .chk-row:not(:disabled)').forEach(c=>{c.checked=state; const i=Number(c.dataset.idx); computedRows[i].selected=state; }); });
+  el('btnCommitSelected').addEventListener('click', commitSelected);
+
+  // drag & drop
+  const dz=el('dropzone'); const fi=el('excelFile');
+  dz.addEventListener('click', ()=>fi.click());
+  const stopEv=e=>{e.preventDefault();e.stopPropagation();}
+  ;['dragenter','dragover'].forEach(evt=> dz.addEventListener(evt, e=>{stopEv(e); dz.classList.add('drag'); if(e.dataTransfer) e.dataTransfer.dropEffect='copy';}));
+  ;['dragleave','drop'].forEach(evt=> dz.addEventListener(evt, e=>{stopEv(e); dz.classList.remove('drag');}));
+  dz.addEventListener('drop', e=>{
+    const f=Array.from(e.dataTransfer.files||[]).find(x=>/\.xlsx$/i.test(x.name));
+    if(!f){ showToast('Drop a .xlsx file'); return; }
+    const r=new FileReader(); r.onload=ev=>handleWorkbook(ev.target.result); r.readAsArrayBuffer(f);
+  });
+  fi.addEventListener('change', e=>{
+    const f=e.target.files?.[0]; if(!f) return; const r=new FileReader(); r.onload=ev=>handleWorkbook(ev.target.result); r.readAsArrayBuffer(f);
+  });
+
+  // registry filters & actions
+  el('regSearch').addEventListener('input', debounce(renderRegistry,200));
+  ['fActive','fInactive','fConflict','fDraft'].forEach(id=> el(id).addEventListener('change', renderRegistry));
+  el('btnExportRegistry').addEventListener('click', exportRegistry);
+  el('btnImportRegistry').addEventListener('click', ()=> el('importFile').click());
+  el('importFile').addEventListener('change', e=>{ const f=e.target.files?.[0]; if(f) importRegistry(f); e.target.value=''; });
+  el('btnClearRegistry').addEventListener('click', async()=>{ await dbClear(); await refreshRegistry(); showToast('Registry cleared'); });
+
+  // history
+  el('btnClearHistory').addEventListener('click', ()=>{ localStorage.removeItem(LS_HISTORY); renderHistory([]); });
+
+  // reset
+  el('clearAll').addEventListener('click', async ()=>{
+    if(!confirm('This will clear registry + all local settings. Proceed?')) return;
+    await dbClear();
+    [LS_ABBR,LS_STOP,LS_RULES,LS_HISTORY,LS_REGW].forEach(k=> localStorage.removeItem(k));
+    location.reload();
+  });
+
+  // Toggle sidebar (desktop collapse / mobile overlay)
+  const appEl = el('app'), body = document.body, overlay = el('overlay');
+  const toggleMenu = ()=>{
+    if (window.matchMedia('(max-width:1100px)').matches){
+      body.classList.toggle('menu-open');
+    }else{
+      appEl.classList.toggle('collapsed');
+    }
+  };
+  el('btnToggleMenu').addEventListener('click', toggleMenu);
+  overlay.addEventListener('click', ()=> body.classList.remove('menu-open'));
+  window.addEventListener('keydown', e=>{ if(e.key==='Escape'){ body.classList.remove('menu-open'); } });
+
+  // ----- NEW: resizable right panel -----
+  const root = document.documentElement;
+  const savedW = parseInt(localStorage.getItem(LS_REGW)||'',10);
+  if(!isNaN(savedW) && savedW>360 && savedW<1200){ root.style.setProperty('--reg-w', savedW+'px'); }
+  let dragging=false, startX=0, startW=0;
+  const splitter = el('splitter');
+  const onDown = (e)=>{ if (window.matchMedia('(max-width:1100px)').matches) return; dragging=true; startX=e.clientX; startW=parseInt(getComputedStyle(root).getPropertyValue('--reg-w'))||520; document.body.style.userSelect='none'; };
+  const onMove = (e)=>{ if(!dragging) return; const dx = startX - e.clientX; let nw = startW + dx; nw = Math.max(360, Math.min(1200, nw)); root.style.setProperty('--reg-w', nw+'px'); };
+  const onUp = ()=>{ if(!dragging) return; dragging=false; document.body.style.userSelect=''; const cur = parseInt(getComputedStyle(root).getPropertyValue('--reg-w')); localStorage.setItem(LS_REGW, String(cur)); };
+  splitter.addEventListener('mousedown', onDown);
+  window.addEventListener('mousemove', onMove);
+  window.addEventListener('mouseup', onUp);
+  splitter.addEventListener('dblclick', ()=>{ appEl.classList.toggle('reg-collapsed'); });
+
+  // view buttons
+  el('btnHideReg').addEventListener('click', ()=> appEl.classList.toggle('reg-collapsed'));
+  el('btnRegFull').addEventListener('click', ()=> appEl.classList.toggle('reg-max'));
+  el('btnExpandGenTable').addEventListener('click', ()=>{
+    const work=document.getElementById('generator');
+    work.classList.toggle('expanded');
+    el('btnExpandGenTable').textContent = work.classList.contains('expanded') ? 'Shrink table' : 'Expand table';
+  });
+  el('btnExpandRegList').addEventListener('click', ()=>{
+    const reg=document.getElementById('registry');
+    reg.classList.toggle('expanded');
+    el('btnExpandRegList').textContent = reg.classList.contains('expanded') ? 'Shrink list' : 'Expand list';
+  });
+
+  setExportsEnabled(false);
+}
+init();
+
+/* =========================== Template =========================== */
+function downloadTemplate(){
+  const ws=XLSX.utils.aoa_to_sheet([["Product Name","Style","Material","Color","Size"]]);
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Template');
+  const out=XLSX.write(wb,{bookType:'xlsx',type:'array'});
+  download(new Blob([out],{type:'application/octet-stream'}),'boketto_template.xlsx');
+}
+
+/* =========================== Airtable Integration =========================== */
+(function(){
+  const LS_KEY='airtableCfg_v1';
+  function getCfg(){
+    try { return JSON.parse(localStorage.getItem(LS_KEY)||'{}'); } catch(e){ return {}; }
+  }
+  function setCfg(c){ localStorage.setItem(LS_KEY, JSON.stringify(c||{})); updateStatus(); }
+  function hasCfg(){ const c=getCfg(); return !!(c.baseId && c.tableName && c.token); }
+  function headers(){
+    const c=getCfg();
+    return { 'Authorization': 'Bearer '+c.token, 'Content-Type': 'application/json' };
+  }
+  function url(path){ const c=getCfg(); return `https://api.airtable.com/v0/${c.baseId}/${encodeURIComponent(c.tableName)}${path||''}`; }
+  async function fetchJSON(method, u, body){
+    const res = await fetch(u, { method, headers: headers(), body: body?JSON.stringify(body):undefined });
+    if(!res.ok){ const text=await res.text(); throw new Error(`Airtable ${method} ${u} → ${res.status}: ${text}`); }
+    return await res.json();
+  }
+  function mapToFields(item){
+    return {
+      SKU: item.sku || '',
+      Style: item.style || '',
+      Material: item.material || '',
+      Color: item.color || '',
+      Size: item.size || '',
+      Variants: item.variantKey || '',
+      Status: item.status === 'active'
+    };
+  }
+  function mapFromFields(rec){
+    const f = rec.fields || {};
+    const status = f.Status ? 'active' : 'inactive';
+    const variantKey = f.Variants || [f.Style,f.Material,f.Color,f.Size].filter(Boolean).join('|').toLowerCase();
+    return {
+      atId: rec.id,
+      sku: f.SKU||'',
+      style: f.Style||'',
+      material: f.Material||'',
+      color: f.Color||'',
+      size: f.Size||'',
+      variantKey,
+      status,
+      createdAt: Date.now()
+    };
+  }
+
+  const AT = {
+    hasCfg,
+    getCfg,
+    setCfg,
+    async list(){ return fetchJSON('GET', url()); },
+    async createMany(records){
+      const out = [];
+      for(let i=0;i<records.length;i+=10){
+        const batch = records.slice(i,i+10).map(r=>({fields: mapToFields(r)}));
+        const json = await fetchJSON('POST', url(), { records: batch });
+        out.push(...(json.records||[]));
+      }
+      return out;
+    },
+    async updateOne(id, fields){ return fetchJSON('PATCH', url('/'+id), { fields }); },
+    async updateMany(arr){
+      for(let i=0;i<arr.length;i+=10){
+        const batch = arr.slice(i,i+10).map(x=>({ id:x.id, fields:x.fields }));
+        await fetchJSON('PATCH', url(), { records: batch });
+      }
+    },
+    async deleteOne(id){ return fetchJSON('DELETE', url('/'+id)); }
+  };
+  window.__AT__ = AT;
+
+  function updateStatus(){
+    const s = document.getElementById('atStatus');
+    if(!s) return;
+    if(!hasCfg()){ s.style.display='none'; return; }
+    const c=getCfg();
+    s.textContent = `Airtable: ${c.baseId}/${c.tableName}`;
+    s.style.display='inline-block';
+  }
+
+  document.getElementById('btnAtSettings')?.addEventListener('click', ()=>{
+    const cur = getCfg();
+    const baseId = prompt('Base ID (ex: appiNFA6On71LJ8H2):', cur.baseId || '');
+    if(baseId===null) return;
+    const tableName = prompt('Table name (ex: SKUs):', cur.tableName || 'SKUs');
+    if(tableName===null) return;
+    const token = prompt('Personal Access Token:', cur.token || '');
+    if(token===null) return;
+    setCfg({ baseId, tableName, token });
+    showToast('Airtable settings saved.');
+  });
+
+  document.getElementById('btnAtPull')?.addEventListener('click', async ()=>{
+    if(!hasCfg()){ showToast('Configure Airtable first'); return; }
+    try{
+      const json = await AT.list();
+      const incoming = (json.records||[]).map(mapFromFields);
+      const byVariant = new Map(registryCache.list.map(x=>[x.variantKey, x]));
+      const toAdd = [];
+      incoming.forEach(rec=>{
+        const ex = byVariant.get(rec.variantKey);
+        if(ex){
+          if(!ex.atId){ ex.atId = rec.atId; dbPut(ex); }
+        }else{
+          toAdd.push(rec);
+        }
+      });
+      if(toAdd.length){ await dbAddMany(toAdd); }
+      await refreshRegistry();
+      document.dispatchEvent(new Event('airtable-sync-done'));
+      showToast(`Pulled ${incoming.length} from Airtable. Added ${toAdd.length}.`);
+    }catch(e){ console.error(e); showToast('Airtable pull failed'); }
+  });
+
+  const oldCommit = window.commitSelected;
+  if(oldCommit){
+    window.commitSelected = async function(){
+      await oldCommit();
+      if(hasCfg()){
+        const latest = registryCache.list.filter(x=>!x.atId && (x.status==='active'||x.status==='inactive'));
+        if(latest.length){
+          try{
+            const created = await AT.createMany(latest);
+            const byVariant = new Map(latest.map(x=>[x.variantKey, x]));
+            (created||[]).forEach(r=>{
+              const f=r.fields||{};
+              const vKey=(f.Variants || [f.Style,f.Material,f.Color,f.Size].filter(Boolean).join('|')).toLowerCase();
+              const local=byVariant.get(vKey); if(local){ local.atId=r.id; dbPut(local); }
+            });
+            await refreshRegistry();
+            showToast(`Auto-synced ${created.length} to Airtable.`);
+          }catch(e){ console.warn('Auto push failed', e); }
+        }
+      }
+    };
+  }
+
+  const __origRender = window.renderRegistry;
+  if(__origRender){
+    window.renderRegistry = async function(){
+      await __origRender();
+      document.querySelectorAll('#regBody [data-act]')?.forEach(btn=>{
+        btn.addEventListener('click', async (ev)=>{
+          setTimeout(async ()=>{
+            try{
+              const id = Number(btn.dataset.id);
+              const item = registryCache.list.find(x=>x.id===id);
+              if(!item || !hasCfg() || !item.atId) return;
+              const act = btn.dataset.act;
+              if(act==='delete'){
+                await AT.deleteOne(item.atId);
+              }else if(act==='activate' || act==='deactivate'){
+                await AT.updateOne(item.atId, { Status: item.status==='active' });
+              }
+            }catch(e){ console.warn('Airtable sync (row action) failed', e); }
+          }, 50);
+        }, { once:true });
+      });
+      updateStatus();
+    };
+  }
+  updateStatus();
+})();
+
+/* ======================= Airtable UX Enhancements ======================= */
+(function(){
+  const DEFAULT_CFG = {
+    baseId: 'appiNFA6On71LJ8H2',
+    tableName: 'SKUs',
+    token: 'patoefuNxRWZlhMe9.ffa291895d7365f0d1f022147b12a26d258c71acdb4c8fc1ee3b989491ff690e'
+  };
+  const LS_KEY='airtableCfg_v1';
+
+  // Seed defaults if missing
+  try {
+    const cur = JSON.parse(localStorage.getItem(LS_KEY) || '{}');
+    if(!cur.baseId || !cur.tableName || !cur.token){
+      localStorage.setItem(LS_KEY, JSON.stringify(DEFAULT_CFG));
+    }
+  } catch(e){ localStorage.setItem(LS_KEY, JSON.stringify(DEFAULT_CFG)); }
+
+  function setLoading(btn, on, txt){
+    if(!btn) return;
+    if(on){
+      btn.dataset._old = btn.textContent;
+      btn.disabled = true;
+      btn.textContent = (txt || 'Processing...');
+    }else{
+      btn.disabled = false;
+      if(btn.dataset._old){ btn.textContent = btn.dataset._old; delete btn.dataset._old; }
+    }
+  }
+
+  // Context menu on settings: reset to defaults
+  const settingsBtn = document.getElementById('btnAtSettings');
+  if(settingsBtn){
+    settingsBtn.addEventListener('contextmenu', (e)=>{
+      e.preventDefault();
+      localStorage.setItem(LS_KEY, JSON.stringify(DEFAULT_CFG));
+      const s=document.getElementById('atStatus');
+      if(s){ s.style.display='inline-block'; s.textContent=`Airtable: ${DEFAULT_CFG.baseId}/${DEFAULT_CFG.tableName}`; }
+      showToast('Airtable settings reset to defaults.');
+    });
+  }
+
+  // Selection column
+  const sel = new Set();
+  function getRowId(tr){ const did = tr.getAttribute('data-id'); return did ? Number(did) : null; }
+  function ensureSelectionColumn(){
+    const head = document.querySelector('#regHead tr');
+    const body = document.querySelector('#regBody');
+    if(!head || !body) return;
+    if(!head.querySelector('th.__sel')){
+      const th = document.createElement('th');
+      th.className='__sel';
+      const cb = document.createElement('input');
+      cb.type='checkbox'; cb.title='Selecionar todos';
+      cb.addEventListener('change', ()=>{
+        sel.clear();
+        body.querySelectorAll('tr').forEach(tr=>{
+          const id = getRowId(tr);
+          const box = tr.querySelector('input.__selcb');
+          if(!box) return;
+          box.checked = cb.checked;
+          if(cb.checked && id!=null) sel.add(id);
+          tr.classList.toggle('row-selected', cb.checked);
+        });
+      });
+      th.appendChild(cb);
+      head.prepend(th);
+    }
+    body.querySelectorAll('tr').forEach(tr=>{
+      if(tr.querySelector('td.__sel')) return;
+      const td = document.createElement('td');
+      td.className='__sel';
+      const cb = document.createElement('input');
+      cb.type='checkbox'; cb.className='__selcb';
+      cb.addEventListener('change', ()=>{
+        const id = getRowId(tr);
+        if(id==null) return;
+        if(cb.checked) sel.add(id); else sel.delete(id);
+        tr.classList.toggle('row-selected', cb.checked);
+      });
+      td.appendChild(cb);
+      tr.prepend(td);
+    });
+  }
+
+  const __origRender2 = window.renderRegistry;
+  if(__origRender2){
+    window.renderRegistry = async function(){
+      await __origRender2();
+      try{ ensureSelectionColumn(); }catch(e){}
+    };
+  } else {
+    document.addEventListener('DOMContentLoaded', ()=>{ try{ ensureSelectionColumn(); }catch(e){} });
+  }
+
+  function getSelectedItems(){
+    return registryCache.list.filter(x=> sel.has(x.id));
+  }
+
+  // Enhanced Push: create for items without atId; update for items with atId; respect selection
+  const pushBtn = document.getElementById('btnAtPush');
+  if(pushBtn){
+    pushBtn.addEventListener('click', async (e)=>{
+      e.stopImmediatePropagation();
+      if(typeof __AT__==='undefined' || !__AT__.hasCfg()){ showToast('Configure Airtable first'); return; }
+      const btn = e.currentTarget;
+      setLoading(btn, true, 'Syncing...');
+      try{
+        const selected = getSelectedItems();
+        const scope = selected.length ? selected : registryCache.list;
+        const toCreate = scope.filter(x=>!x.atId && (x.status==='active'||x.status==='inactive'));
+        const toUpdate = scope.filter(x=>x.atId && (x.status==='active'||x.status==='inactive'));
+        let created = [];
+        if(toCreate.length){
+          created = await __AT__.createMany(toCreate);
+          const byVariant = new Map(toCreate.map(x=>[x.variantKey, x]));
+          (created||[]).forEach(r=>{
+            const f=r.fields||{};
+            const vKey=(f.Variants || [f.Style,f.Material,f.Color,f.Size].filter(Boolean).join('|')).toLowerCase();
+            const local=byVariant.get(vKey); if(local){ local.atId=r.id; dbPut(local); }
+          });
+        }
+        if(toUpdate.length){
+          const patches = toUpdate.map(x=>({ id: x.atId, fields: {
+            SKU: x.sku||'', Style: x.style||'', Material: x.material||'',
+            Color: x.color||'', Size: x.size||'', Variants: x.variantKey||'',
+            Status: x.status==='active'
+          }}));
+          await __AT__.updateMany(patches);
+        }
+        await refreshRegistry();
+        showToast(`Synced: created ${created.length}, updated ${toUpdate.length}.`);
+      } catch(err){
+        console.error(err);
+        showToast('Airtable push failed');
+      } finally {
+        setLoading(btn, false);
+      }
+    }, { capture:true });
+  }
+
+  // Loading feedback for Pull
+  const pullBtn = document.getElementById('btnAtPull');
+  if(pullBtn){
+    pullBtn.addEventListener('click', (e)=>{
+      const btn = e.currentTarget;
+      setLoading(btn, true, 'Syncing...');
+      const done = ()=> setLoading(btn,false);
+      document.addEventListener('airtable-sync-done', done, { once:true });
+      setTimeout(done, 4000); // fallback
+    }, { capture:true });
+  }
+
+  // styling
+  const style = document.createElement('style');
+  style.textContent = `
+    #regHead th.__sel, #regBody td.__sel { width:28px; text-align:center; }
+    #regBody tr.row-selected { outline: 2px solid var(--primary, #4f46e5); outline-offset: -2px; background: rgba(79,70,229,0.06); }
+  `;
+  document.head.appendChild(style);
+})();
+</script>
+</body>
+</html>
