@@ -1,8 +1,3 @@
-<div style="display: flex; align-items: center; gap: 8px;">
-  <button id="toggleBtn" onclick="toggleTimer()" style="background: none; border: none; font-size: 20px; cursor: pointer;">▶️</button>
-  <span id="timerText" style="font-size: 14px; font-family: sans-serif;">00:00:00</span>
-</div>
-
 <script>
   let startTime, elapsedTime = 0, timerInterval, isRunning = false;
 
@@ -17,7 +12,7 @@
   const API_URL = `https://x8ki-letl-twmt.n7.xano.io/api:MmzSqGu8/fluxo_de_trabalho/${taskId}`;
 
   function formatTime(ms) {
-    const total = Math.floor(ms / 1000);
+    const total = Math.max(0, Math.floor(ms / 1000));
     const h = String(Math.floor(total / 3600)).padStart(2, '0');
     const m = String(Math.floor((total % 3600) / 60)).padStart(2, '0');
     const s = String(total % 60).padStart(2, '0');
@@ -39,21 +34,27 @@
     }
 
     if (!isRunning) {
+      // ▶️ INICIAR / RETOMAR
       startTime = Date.now();
       timerInterval = setInterval(updateDisplay, 1000);
       isRunning = true;
       btn.textContent = "⏸️";
 
-      await fetch(API_URL, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          Last_Started_At: new Date().toISOString(),
-          Timer_Running: true
-        })
-      });
+      try {
+        await fetch(API_URL, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            Last_Started_At: new Date().toISOString(),
+            Timer_Running: true
+          })
+        });
+      } catch (e) {
+        console.error("Erro ao iniciar timer:", e);
+      }
 
     } else {
+      // ⏸️ PAUSAR
       clearInterval(timerInterval);
       isRunning = false;
       btn.textContent = "▶️";
@@ -63,14 +64,58 @@
       elapsedTime += diff;
 
       const totalSeconds = Math.floor(elapsedTime / 1000);
-      await fetch(API_URL, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          Tempo_Total: totalSeconds,
-          Timer_Running: false
-        })
-      });
+      document.getElementById("timerText").textContent = formatTime(elapsedTime);
+
+      try {
+        await fetch(API_URL, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            Tempo_Total: totalSeconds,     // salva acumulado (s)
+            Timer_Running: false
+          })
+        });
+      } catch (e) {
+        console.error("Erro ao pausar timer:", e);
+      }
     }
   }
+
+  // 🔄 Carrega tempo salvo e auto-retoma se estava rodando
+  async function bootstrap() {
+    if (!taskId) return;
+
+    try {
+      const res = await fetch(API_URL, { method: "GET" });
+      const data = await res.json();
+
+      const persistedSeconds = Number(data?.Tempo_Total || 0);
+      const wasRunning = Boolean(data?.Timer_Running);
+      const lastStartedISO = data?.Last_Started_At;
+
+      // 1) Preenche o tempo acumulado salvo
+      elapsedTime = persistedSeconds * 1000;
+      document.getElementById("timerText").textContent = formatTime(elapsedTime);
+
+      // 2) Se estava rodando antes do refresh, continua de onde parou
+      if (wasRunning && lastStartedISO) {
+        const lastStartMs = Date.parse(lastStartedISO);
+        if (!Number.isNaN(lastStartMs)) {
+          // considera o tempo que passou desde o último start
+          const carryMs = Date.now() - lastStartMs;
+          // inicia interval a partir de agora, somando carry
+          startTime = Date.now() - carryMs;
+          isRunning = true;
+          document.getElementById("toggleBtn").textContent = "⏸️";
+          timerInterval = setInterval(updateDisplay, 1000);
+          // pinta já com o acumulado + carry
+          document.getElementById("timerText").textContent = formatTime(elapsedTime + carryMs);
+        }
+      }
+    } catch (err) {
+      console.error("Erro ao carregar estado:", err);
+    }
+  }
+
+  window.addEventListener("load", bootstrap);
 </script>
