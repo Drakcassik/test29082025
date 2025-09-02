@@ -6,11 +6,10 @@
 <script>
   let startTime, elapsedTime = 0, timerInterval, isRunning = false;
 
-  // 🔄 Pegando o taskId da URL
+  // Obtém taskId passado via query string: ?taskId=XXXX
   const urlParams = new URLSearchParams(window.location.search);
   const taskId = urlParams.get('taskId');
 
-  // ⚠️ Verifica se taskId existe antes de seguir
   if (!taskId) {
     console.error("Erro: taskId não fornecido na URL");
   }
@@ -40,7 +39,6 @@
     }
 
     if (!isRunning) {
-      // ▶️ INICIAR
       startTime = Date.now();
       timerInterval = setInterval(updateDisplay, 1000);
       isRunning = true;
@@ -56,7 +54,6 @@
       });
 
     } else {
-      // ⏸️ PAUSAR
       clearInterval(timerInterval);
       isRunning = false;
       btn.textContent = "▶️";
