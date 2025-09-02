@@ -4,138 +4,73 @@
 </div>
 
 <script>
-  let startTime = 0;          // timestamp (ms) quando começou a última sessão
-  let elapsedTime = 0;        // ms acumulados (persistidos + sessão atual)
-  let timerInterval = null;
-  let isRunning = false;
+  let startTime, elapsedTime = 0, timerInterval, isRunning = false;
 
-  // --- Utilidades ---
-  const $ = (id) => document.getElementById(id);
+  // Obtém taskId passado via query string: ?taskId=XXXX
   const urlParams = new URLSearchParams(window.location.search);
   const taskId = urlParams.get('taskId');
-  const API_URL = taskId
-    ? `https://x8ki-letl-twmt.n7.xano.io/api:MmzSqGu8/fluxo_de_trabalho/${taskId}`
-    : null;
+
+  if (!taskId) {
+    console.error("Erro: taskId não fornecido na URL");
+  }
+
+  const API_URL = `https://x8ki-letl-twmt.n7.xano.io/api:MmzSqGu8/fluxo_de_trabalho/${taskId}`;
 
   function formatTime(ms) {
-    const total = Math.max(0, Math.floor(ms / 1000));
+    const total = Math.floor(ms / 1000);
     const h = String(Math.floor(total / 3600)).padStart(2, '0');
     const m = String(Math.floor((total % 3600) / 60)).padStart(2, '0');
     const s = String(total % 60).padStart(2, '0');
     return `${h}:${m}:${s}`;
   }
 
-  function paint(ms) {
-    $("timerText").textContent = formatTime(ms);
-  }
-
-  function tick() {
+  function updateDisplay() {
     const now = Date.now();
-    const diff = now - startTime; // ms desde que apertou play
-    paint(elapsedTime + diff);
+    const diff = now - startTime + elapsedTime;
+    document.getElementById("timerText").textContent = formatTime(diff);
   }
 
-  // --- Ciclo do botão ---
   async function toggleTimer() {
-    if (!taskId || !API_URL) {
+    const btn = document.getElementById("toggleBtn");
+
+    if (!taskId) {
       alert("taskId não encontrado na URL.");
       return;
     }
 
-    const btn = $("toggleBtn");
-
     if (!isRunning) {
-      // ▶️ INICIAR / RETOMAR
       startTime = Date.now();
-      timerInterval = setInterval(tick, 1000);
+      timerInterval = setInterval(updateDisplay, 1000);
       isRunning = true;
       btn.textContent = "⏸️";
 
-      try {
-        await fetch(API_URL, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            Last_Started_At: new Date().toISOString(),
-            Timer_Running: true
-          })
-        });
-      } catch (e) {
-        console.error("Erro ao iniciar timer:", e);
-      }
+      await fetch(API_URL, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          Last_Started_At: new Date().toISOString(),
+          Timer_Running: true
+        })
+      });
 
     } else {
-      // ⏸️ PAUSAR
       clearInterval(timerInterval);
       isRunning = false;
       btn.textContent = "▶️";
 
       const now = Date.now();
-      const sessionMs = now - startTime;
-      elapsedTime += sessionMs; // acumula sessão atual
+      const diff = now - startTime;
+      elapsedTime += diff;
 
-      paint(elapsedTime);
-
-      try {
-        await fetch(API_URL, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            Tempo_Total: Math.floor(elapsedTime / 1000), // salva acumulado em segundos
-            Timer_Running: false
-          })
-        });
-      } catch (e) {
-        console.error("Erro ao pausar timer:", e);
-      }
+      const totalSeconds = Math.floor(elapsedTime / 1000);
+      await fetch(API_URL, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          Tempo_Total: totalSeconds,
+          Timer_Running: false
+        })
+      });
     }
   }
-
-  // --- Carregar estado salvo e auto-retomar se estiver rodando ---
-  async function bootstrap() {
-    if (!taskId || !API_URL) {
-      console.error("taskId não fornecido na URL");
-      paint(0);
-      return;
-    }
-
-    try {
-      const res = await fetch(API_URL, { method: "GET" });
-      const data = await res.json();
-
-      // Normaliza campos
-      const persistedSeconds = Number(data?.Tempo_Total || 0);
-      const wasRunning = Boolean(data?.Timer_Running);
-      const lastStartedISO = data?.Last_Started_At;
-
-      // Carrega acumulado persistido
-      elapsedTime = persistedSeconds * 1000;
-      paint(elapsedTime);
-
-      // Se estava rodando, calcula o tempo que passou desde o último start e retoma
-      if (wasRunning && lastStartedISO) {
-        const lastStartMs = Date.parse(lastStartedISO); // ms
-        if (!Number.isNaN(lastStartMs)) {
-          startTime = Date.now();                       // novo marco
-          // soma o tempo decorrido desde o último start ao elapsedTime,
-          // mas sem persistir ainda (persistimos apenas ao pausar).
-          const carryMs = Date.now() - lastStartMs;
-          paint(elapsedTime + carryMs);
-
-          timerInterval = setInterval(tick, 1000);
-          isRunning = true;
-          $("toggleBtn").textContent = "⏸️";
-        } else {
-          $("toggleBtn").textContent = "▶️";
-        }
-      } else {
-        $("toggleBtn").textContent = "▶️";
-      }
-    } catch (err) {
-      console.error("Erro ao carregar estado do timer:", err);
-      paint(elapsedTime);
-    }
-  }
-
-  window.addEventListener("load", bootstrap);
 </script>
