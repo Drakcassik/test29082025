@@ -1,3 +1,8 @@
+<div style="display: flex; align-items: center; gap: 8px;">
+  <button id="toggleBtn" onclick="toggleTimer()" style="background: none; border: none; font-size: 20px; cursor: pointer;">▶️</button>
+  <span id="timerText" style="font-size: 14px; font-family: sans-serif;">00:00:00</span>
+</div>
+
 <script>
   let startTime, elapsedTime = 0, timerInterval, isRunning = false;
 
@@ -25,22 +30,6 @@
     document.getElementById("timerText").textContent = formatTime(diff);
   }
 
-  // Lê o estado atual no Xano (Tempo_Total, Timer_Running, Last_Started_At)
-  async function fetchServerState() {
-    try {
-      var res = await fetch(API_URL, { method: "GET", cache: "no-store" });
-      var data = await res.json();
-      return {
-        tempoTotalSec: Number(data && data.Tempo_Total ? data.Tempo_Total : 0),
-        timerRunning: !!(data && data.Timer_Running),
-        lastStartedAt: data && data.Last_Started_At ? data.Last_Started_At : null
-      };
-    } catch (e) {
-      console.error("Erro ao buscar estado:", e);
-      return { tempoTotalSec: 0, timerRunning: false, lastStartedAt: null };
-    }
-  }
-
   async function toggleTimer() {
     var btn = document.getElementById("toggleBtn");
 
@@ -51,27 +40,11 @@
 
     if (!isRunning) {
       // ▶️ INICIAR / RETOMAR
-      // 1) Antes de começar, sincroniza com o servidor
-      var state = await fetchServerState();
-
-      // base: tempo acumulado salvo
-      elapsedTime = (isFinite(state.tempoTotalSec) ? state.tempoTotalSec : 0) * 1000;
-
-      // se o servidor diz que estava rodando, soma o tempo desde o último start
-      if (state.timerRunning && state.lastStartedAt) {
-        var lastStartMs = Date.parse(state.lastStartedAt);
-        if (!isNaN(lastStartMs)) {
-          elapsedTime += (Date.now() - lastStartMs);
-        }
-      }
-
-      // 2) Agora começa a sessão atual
       startTime = Date.now();
       timerInterval = setInterval(updateDisplay, 1000);
       isRunning = true;
       btn.textContent = "⏸️";
 
-      // 3) Marca como rodando no servidor (reinicia o Last_Started_At)
       try {
         await fetch(API_URL, {
           method: "PATCH",
@@ -110,7 +83,61 @@
         console.error("Erro ao pausar timer:", e);
       }
 
+      // pinta o acumulado final no display
       document.getElementById("timerText").textContent = formatTime(elapsedTime);
     }
+  }
+
+  // 👇 ADIÇÃO 1: carregar tempo salvo e pintar
+  async function bootstrap() {
+    if (!taskId) return;
+
+    try {
+      var res = await fetch(API_URL, { method: "GET" });
+      var data = await res.json();
+
+      var persistedSeconds = Number(data && data.Tempo_Total ? data.Tempo_Total : 0);
+      var wasRunning = !!(data && data.Timer_Running);
+      var lastStartedISO = data && data.Last_Started_At ? data.Last_Started_At : null;
+
+      // carrega acumulado salvo
+      elapsedTime = persistedSeconds * 1000;
+      document.getElementById("timerText").textContent = formatTime(elapsedTime);
+
+      // 👇 ADIÇÃO 2: se estava rodando, retoma automaticamente
+      if (wasRunning && lastStartedISO) {
+        var lastStartMs = Date.parse(lastStartedISO);
+        if (!isNaN(lastStartMs)) {
+          // calcula quanto passou desde o último start
+          var carryMs = Date.now() - lastStartMs;
+
+          // ajusta startTime para o intervalo começar certo
+          startTime = Date.now();
+          // atualiza o display já considerando o carry
+          document.getElementById("timerText").textContent = formatTime(elapsedTime + carryMs);
+
+          // inicia o ticking
+          timerInterval = setInterval(function() {
+            var now = Date.now();
+            var diff = now - startTime; // desde o bootstrap
+            document.getElementById("timerText").textContent = formatTime(elapsedTime + carryMs + diff);
+          }, 1000);
+
+          isRunning = true;
+          document.getElementById("toggleBtn").textContent = "⏸️";
+        }
+      }
+    } catch (err) {
+      console.error("Erro ao carregar estado:", err);
+      // mantém o display como está (00:00:00 ou o que já havia)
+    }
+  }
+
+  // chama bootstrap ao carregar
+  if (document.readyState === "complete" || document.readyState === "interactive") {
+    // DOM já disponível
+    bootstrap();
+  } else {
+    window.addEventListener("load", bootstrap);
   }
 </script>
