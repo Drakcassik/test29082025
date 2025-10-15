@@ -3,130 +3,112 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Sales Trend Chart</title>
+  <title>Sales Trend</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
+    :root {
+      --accent: #8B5CF6;
+      --text: #111827;
+      --muted: #6b7280;
+    }
+
     body {
       font-family: 'Inter', system-ui, -apple-system, sans-serif;
-      background: linear-gradient(135deg, #f9fafb, #eef2ff);
-      color: #111827;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
+      background: transparent;
       margin: 0;
-      padding: 20px;
+      padding: 0;
     }
-    .card {
-      background: rgba(255, 255, 255, 0.9);
-      border: 1px solid rgba(255, 255, 255, 0.3);
-      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.05);
-      backdrop-filter: blur(8px);
-      border-radius: 16px;
-      max-width: 900px;
+
+    .chart-wrapper {
       width: 100%;
-      padding: 24px 28px;
+      height: 420px;
+      border-radius: 14px;
+      box-sizing: border-box;
+      position: relative;
     }
-    .card-header {
+
+    .chart-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      margin-bottom: 12px;
+      margin-bottom: 10px;
     }
-    .title {
-      font-size: 1.25rem;
+
+    .chart-header .title {
+      font-size: 1.1rem;
       font-weight: 600;
-      margin-bottom: 4px;
+      color: var(--text);
     }
-    .subtitle {
-      font-size: 0.875rem;
-      color: #6b7280;
+
+    .chart-header .subtitle {
+      font-size: 0.85rem;
+      color: var(--muted);
+      margin-top: 2px;
     }
-    .controls {
-      display: flex;
-      gap: 8px;
-      align-items: center;
-    }
-    button {
-      border: none;
-      border-radius: 8px;
-      padding: 6px 12px;
-      font-size: 0.875rem;
-      cursor: pointer;
-      transition: all 0.2s ease;
+
+    #refreshBtn {
       background: #f3f4f6;
+      color: #111827;
+      border: none;
+      padding: 6px 12px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      transition: all 0.2s ease;
     }
-    button.active {
-      background: #8B5CF6;
-      color: white;
-    }
-    button:hover {
+
+    #refreshBtn:hover {
       background: #e5e7eb;
     }
-    .loading {
-      text-align: center;
-      color: #6b7280;
-      font-size: 0.9rem;
-      padding: 40px 0;
-    }
-    canvas {
+
+    #salesChart {
       width: 100% !important;
-      height: 350px !important;
+      height: 360px !important;
+    }
+
+    .loading {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 0.95rem;
+      color: var(--muted);
     }
   </style>
 </head>
 <body>
-  <div class="card">
-    <div class="card-header">
+  <div class="chart-wrapper">
+    <div class="chart-header">
       <div>
         <div class="title">Sales Trend</div>
-        <div class="subtitle" id="subtitle">Vendas dos últimos 30 dias</div>
+        <div class="subtitle">Sales evolution over the last 30 days</div>
       </div>
-      <div class="controls">
-        <button id="btn7">7d</button>
-        <button id="btn30" class="active">30d</button>
-        <button id="btn90">90d</button>
-        <button id="toggleTest">🔋 Testar</button>
-      </div>
+      <button id="refreshBtn">↻ Atualizar</button>
     </div>
-    <div class="chart-area">
-      <canvas id="salesChart"></canvas>
-      <div class="loading" id="loading">Carregando dados...</div>
-    </div>
+    <canvas id="salesChart"></canvas>
+    <div class="loading" id="loading">Carregando dados...</div>
   </div>
 
   <script>
     const ctx = document.getElementById("salesChart").getContext("2d");
     const loadingEl = document.getElementById("loading");
-    const subtitleEl = document.getElementById("subtitle");
+    const refreshBtn = document.getElementById("refreshBtn");
+    const API_URL = "https://boketto-api-proxy.contatolucasmartins.workers.dev/analytics/sales-trend?days=30&metric=gross";
 
     let chart;
-    let currentDays = 30;
-    let useTestData = false;
 
-    const API_BASE = "https://boketto-api-proxy.contatolucasmartins.workers.dev";
-
-    async function fetchSalesTrend(days = 30, test = false) {
+    async function fetchData() {
       try {
         loadingEl.style.display = "block";
-        const endpoint = test
-          ? `${API_BASE}/analytics/sales-trend-fallback?days=${days}&status=paid`
-          : `${API_BASE}/analytics/sales-trend?days=${days}&metric=gross`;
-
-        const res = await fetch(endpoint);
-        if (!res.ok) throw new Error("Erro HTTP: " + res.status);
-        const data = await res.json();
-
-        if (!data.points || !Array.isArray(data.points)) {
-          throw new Error("Formato de dados inválido");
-        }
-
-        return data.points.map(p => ({
+        const response = await fetch(API_URL);
+        if (!response.ok) throw new Error("Erro ao buscar dados da API");
+        const data = await response.json();
+        return data.points?.map(p => ({
           date: p.date,
           revenue: Number(p.revenue) || 0
-        }));
-      } catch (err) {
-        console.warn("Erro ao buscar dados:", err);
+        })) || [];
+      } catch (e) {
+        console.error(e);
         return [];
       } finally {
         loadingEl.style.display = "none";
@@ -138,7 +120,7 @@
 
       const labels = data.map(d => {
         const date = new Date(d.date);
-        return isNaN(date) ? "" : `${date.getDate().toString().padStart(2, "0")}/${(date.getMonth() + 1).toString().padStart(2, "0")}`;
+        return `${String(date.getDate()).padStart(2, "0")}/${String(date.getMonth() + 1).padStart(2, "0")}`;
       });
       const values = data.map(d => d.revenue);
 
@@ -146,27 +128,26 @@
         type: "line",
         data: {
           labels,
-          datasets: [
-            {
-              label: "Receita",
-              data: values,
-              borderColor: "#8B5CF6",
-              borderWidth: 2.5,
-              fill: true,
-              tension: 0.4,
-              pointRadius: 3,
-              pointBackgroundColor: "#8B5CF6",
-              backgroundColor: (ctx) => {
-                const gradient = ctx.chart.ctx.createLinearGradient(0, 0, 0, 300);
-                gradient.addColorStop(0, "rgba(139,92,246,0.25)");
-                gradient.addColorStop(1, "rgba(139,92,246,0)");
-                return gradient;
-              },
-            },
-          ],
+          datasets: [{
+            label: "Total de Vendas",
+            data: values,
+            borderColor: "#8B5CF6",
+            borderWidth: 2,
+            fill: true,
+            tension: 0.35,
+            pointRadius: 2.5,
+            pointBackgroundColor: "#8B5CF6",
+            backgroundColor: (ctx) => {
+              const gradient = ctx.chart.ctx.createLinearGradient(0, 0, 0, 300);
+              gradient.addColorStop(0, "rgba(139,92,246,0.25)");
+              gradient.addColorStop(1, "rgba(139,92,246,0)");
+              return gradient;
+            }
+          }]
         },
         options: {
           responsive: true,
+          maintainAspectRatio: false,
           plugins: {
             legend: { display: false },
             tooltip: {
@@ -175,59 +156,43 @@
               bodyColor: "#111827",
               borderColor: "#e5e7eb",
               borderWidth: 1,
-              padding: 12,
+              padding: 10,
               displayColors: false,
               callbacks: {
-                label: (ctx) => `Receita: ${ctx.formattedValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}`,
-                title: (items) => {
-                  const raw = items[0].label;
-                  return "Data: " + raw;
-                },
-              },
-            },
+                label: (ctx) => " " + ctx.formattedValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),
+                title: (items) => "Data: " + items[0].label
+              }
+            }
           },
           scales: {
             x: {
               grid: { display: false },
-              ticks: { color: "#6B7280", font: { size: 12 } },
+              ticks: {
+                color: "#6b7280",
+                font: { size: 12 }
+              }
             },
             y: {
               grid: { color: "#f0f0f0" },
               ticks: {
-                color: "#6B7280",
+                color: "#6b7280",
                 font: { size: 12 },
-                callback: (v) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),
-              },
-            },
-          },
-        },
+                callback: (v) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
+              }
+            }
+          }
+        }
       });
     }
 
-    async function loadChart(days = 30, test = false) {
-      subtitleEl.textContent = `Vendas dos últimos ${days} dias${test ? " (Simulado)" : ""}`;
-      const data = await fetchSalesTrend(days, test);
+    async function loadChart() {
+      const data = await fetchData();
       renderChart(data);
     }
 
-    // Botões
-    document.getElementById("btn7").onclick = () => { setActive(7); };
-    document.getElementById("btn30").onclick = () => { setActive(30); };
-    document.getElementById("btn90").onclick = () => { setActive(90); };
-    document.getElementById("toggleTest").onclick = () => {
-      useTestData = !useTestData;
-      document.getElementById("toggleTest").textContent = useTestData ? "🌐 Reais" : "🔋 Testar";
-      loadChart(currentDays, useTestData);
-    };
+    refreshBtn.addEventListener("click", loadChart);
 
-    function setActive(days) {
-      currentDays = days;
-      document.querySelectorAll(".controls button").forEach(btn => btn.classList.remove("active"));
-      document.getElementById("btn" + days).classList.add("active");
-      loadChart(days, useTestData);
-    }
-
-    // Inicial
+    // Inicializa com dados reais automaticamente
     loadChart();
   </script>
 </body>
