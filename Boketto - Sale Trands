@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sales Trend Chart</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body {
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      background: linear-gradient(135deg, #f9fafb, #eef2ff);
+      color: #111827;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      margin: 0;
+      padding: 20px;
+    }
+    .card {
+      background: rgba(255, 255, 255, 0.9);
+      border: 1px solid rgba(255, 255, 255, 0.3);
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.05);
+      backdrop-filter: blur(8px);
+      border-radius: 16px;
+      max-width: 900px;
+      width: 100%;
+      padding: 24px 28px;
+    }
+    .card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+    }
+    .title {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    .subtitle {
+      font-size: 0.875rem;
+      color: #6b7280;
+    }
+    .controls {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+    button {
+      border: none;
+      border-radius: 8px;
+      padding: 6px 12px;
+      font-size: 0.875rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      background: #f3f4f6;
+    }
+    button.active {
+      background: #8B5CF6;
+      color: white;
+    }
+    button:hover {
+      background: #e5e7eb;
+    }
+    .loading {
+      text-align: center;
+      color: #6b7280;
+      font-size: 0.9rem;
+      padding: 40px 0;
+    }
+    canvas {
+      width: 100% !important;
+      height: 350px !important;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="card-header">
+      <div>
+        <div class="title">Sales Trend</div>
+        <div class="subtitle" id="subtitle">Vendas dos últimos 30 dias</div>
+      </div>
+      <div class="controls">
+        <button id="btn7">7d</button>
+        <button id="btn30" class="active">30d</button>
+        <button id="btn90">90d</button>
+        <button id="toggleTest">🔋 Testar</button>
+      </div>
+    </div>
+    <div class="chart-area">
+      <canvas id="salesChart"></canvas>
+      <div class="loading" id="loading">Carregando dados...</div>
+    </div>
+  </div>
+
+  <script>
+    const ctx = document.getElementById("salesChart").getContext("2d");
+    const loadingEl = document.getElementById("loading");
+    const subtitleEl = document.getElementById("subtitle");
+
+    let chart;
+    let currentDays = 30;
+    let useTestData = false;
+
+    const API_BASE = "https://boketto-api-proxy.contatolucasmartins.workers.dev";
+
+    async function fetchSalesTrend(days = 30, test = false) {
+      try {
+        loadingEl.style.display = "block";
+        const endpoint = test
+          ? `${API_BASE}/analytics/sales-trend-fallback?days=${days}&status=paid`
+          : `${API_BASE}/analytics/sales-trend?days=${days}&metric=gross`;
+
+        const res = await fetch(endpoint);
+        if (!res.ok) throw new Error("Erro HTTP: " + res.status);
+        const data = await res.json();
+
+        if (!data.points || !Array.isArray(data.points)) {
+          throw new Error("Formato de dados inválido");
+        }
+
+        return data.points.map(p => ({
+          date: p.date,
+          revenue: Number(p.revenue) || 0
+        }));
+      } catch (err) {
+        console.warn("Erro ao buscar dados:", err);
+        return [];
+      } finally {
+        loadingEl.style.display = "none";
+      }
+    }
+
+    function renderChart(data) {
+      if (chart) chart.destroy();
+
+      const labels = data.map(d => {
+        const date = new Date(d.date);
+        return isNaN(date) ? "" : `${date.getDate().toString().padStart(2, "0")}/${(date.getMonth() + 1).toString().padStart(2, "0")}`;
+      });
+      const values = data.map(d => d.revenue);
+
+      chart = new Chart(ctx, {
+        type: "line",
+        data: {
+          labels,
+          datasets: [
+            {
+              label: "Receita",
+              data: values,
+              borderColor: "#8B5CF6",
+              borderWidth: 2.5,
+              fill: true,
+              tension: 0.4,
+              pointRadius: 3,
+              pointBackgroundColor: "#8B5CF6",
+              backgroundColor: (ctx) => {
+                const gradient = ctx.chart.ctx.createLinearGradient(0, 0, 0, 300);
+                gradient.addColorStop(0, "rgba(139,92,246,0.25)");
+                gradient.addColorStop(1, "rgba(139,92,246,0)");
+                return gradient;
+              },
+            },
+          ],
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: "#fff",
+              titleColor: "#111827",
+              bodyColor: "#111827",
+              borderColor: "#e5e7eb",
+              borderWidth: 1,
+              padding: 12,
+              displayColors: false,
+              callbacks: {
+                label: (ctx) => `Receita: ${ctx.formattedValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })}`,
+                title: (items) => {
+                  const raw = items[0].label;
+                  return "Data: " + raw;
+                },
+              },
+            },
+          },
+          scales: {
+            x: {
+              grid: { display: false },
+              ticks: { color: "#6B7280", font: { size: 12 } },
+            },
+            y: {
+              grid: { color: "#f0f0f0" },
+              ticks: {
+                color: "#6B7280",
+                font: { size: 12 },
+                callback: (v) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),
+              },
+            },
+          },
+        },
+      });
+    }
+
+    async function loadChart(days = 30, test = false) {
+      subtitleEl.textContent = `Vendas dos últimos ${days} dias${test ? " (Simulado)" : ""}`;
+      const data = await fetchSalesTrend(days, test);
+      renderChart(data);
+    }
+
+    // Botões
+    document.getElementById("btn7").onclick = () => { setActive(7); };
+    document.getElementById("btn30").onclick = () => { setActive(30); };
+    document.getElementById("btn90").onclick = () => { setActive(90); };
+    document.getElementById("toggleTest").onclick = () => {
+      useTestData = !useTestData;
+      document.getElementById("toggleTest").textContent = useTestData ? "🌐 Reais" : "🔋 Testar";
+      loadChart(currentDays, useTestData);
+    };
+
+    function setActive(days) {
+      currentDays = days;
+      document.querySelectorAll(".controls button").forEach(btn => btn.classList.remove("active"));
+      document.getElementById("btn" + days).classList.add("active");
+      loadChart(days, useTestData);
+    }
+
+    // Inicial
+    loadChart();
+  </script>
+</body>
+</html>
