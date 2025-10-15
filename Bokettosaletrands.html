@@ -3,26 +3,66 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Sales Trend</title>
+  <title>Boketto – Dashboard Embed</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    :root { --accent:#8B5CF6; --text:#111827; --muted:#6b7280; }
-    html,body{margin:0;padding:0;background:transparent;font-family:Inter,system-ui,-apple-system,sans-serif;}
-    .chart-wrapper{
+    :root{
+      --accent:#8B5CF6;
+      --text:#111827;
+      --muted:#6b7280;
+      --card:#ffffff; /* os cards têm fundo branco, mas a página é transparente */
+      --border:rgba(0,0,0,.06);
+      --shadow:0 8px 20px rgba(0,0,0,.05);
+      --radius:14px;
+    }
+
+    /* fundo transparente p/ embutir no Noloco */
+    html,body{margin:0;padding:0;background:transparent;font-family:Inter,system-ui,-apple-system,sans-serif;color:var(--text);}
+
+    .container{
       width:100%;
-      height:420px;
-      position:relative;
       box-sizing:border-box;
-      padding:5px; /* leve espaçamento geral */
+      padding:6px 6px 16px; /* leve respiro dentro do iframe */
+    }
+
+    /* GRID DOS CARDS */
+    .cards{
+      display:grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap:16px;
+      margin-bottom:18px;
+    }
+    @media(max-width:1200px){ .cards{ grid-template-columns: repeat(2, 1fr);} }
+    @media(max-width:640px){  .cards{ grid-template-columns: 1fr; } }
+
+    .card{
+      background:var(--card);
+      border:1px solid var(--border);
+      box-shadow:var(--shadow);
+      border-radius:var(--radius);
+      padding:18px 20px;
+    }
+    .kpi-title{font-size:.95rem;color:var(--muted);margin:0 0 8px;}
+    .kpi-value{font-size:1.6rem;font-weight:700;margin:0 0 6px;}
+    .kpi-sub{font-size:.85rem;color:#10b981;margin:0;} /* verdinho “up” */
+
+    /* SALES TREND */
+    .chart-card{
+      background:transparent; /* bloco do gráfico mantém transparência */
+      border:1px solid var(--border);
+      box-shadow:var(--shadow);
+      border-radius:var(--radius);
+      padding:5px;
+      margin-bottom:18px;
     }
     .chart-header{
       display:flex;
       justify-content:space-between;
       align-items:flex-start;
-      margin-bottom:30px; /* espaço entre cabeçalho e gráfico */
-      padding:20px 30px 0 30px; /* padding solicitado - cima/lados */
+      margin-bottom:30px;
+      padding:20px 30px 0 30px; /* padding pedido p/ título + subtítulo */
     }
-    .title{font-size:1.1rem;font-weight:600;color:var(--text);margin:0;}
+    .title{font-size:1.1rem;font-weight:600;margin:0;}
     .subtitle{font-size:.85rem;color:var(--muted);margin-top:4px;}
     .controls{display:flex;gap:8px;align-items:center}
     .pill{border:none;border-radius:8px;padding:6px 12px;font-size:.85rem;cursor:pointer;background:#f3f4f6;color:#111827;transition:.15s}
@@ -36,30 +76,142 @@
       color:var(--muted);font-size:.95rem;text-align:center;padding:16px
     }
     .hidden{display:none!important}
+    .chart-wrap{
+      width:100%;
+      height:420px;
+      position:relative;
+      box-sizing:border-box;
+    }
+
+    /* LINHA INFERIOR */
+    .bottom{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:16px;
+    }
+    @media(max-width:1000px){ .bottom{ grid-template-columns: 1fr; } }
+
+    .panel{
+      background:var(--card);
+      border:1px solid var(--border);
+      box-shadow:var(--shadow);
+      border-radius:var(--radius);
+      padding:20px 22px;
+    }
+    .panel h3{margin:0 0 10px;font-size:1.02rem}
+    .panel p.muted{margin:0 0 14px;color:var(--muted);font-size:.9rem}
+
+    /* barras de afinidade (estáticas) */
+    .bar{
+      background:#f3f4f6;border-radius:10px;height:10px;overflow:hidden;margin:10px 0 18px;position:relative;
+    }
+    .bar > span{
+      display:block;height:100%;background:rgba(139,92,246,.5);
+    }
+    .row{display:flex;justify-content:space-between;align-items:center;font-size:.9rem;color:var(--muted);}
+
+    /* cartões de insights */
+    .insight{border-radius:10px;padding:12px 14px;margin-bottom:10px;border:1px solid var(--border);background:#f8fafc;}
+    .insight .tag{font-size:.8rem;font-weight:600;margin-bottom:6px;display:flex;gap:8px;align-items:center}
+    .insight .txt{font-size:.9rem;color:#374151}
+
   </style>
 </head>
 <body>
-  <div class="chart-wrapper">
-    <div class="chart-header">
-      <div>
-        <div class="title">Sales Trend</div>
-        <div class="subtitle" id="subtitle">Sales evolution over the last 30 days</div>
-      </div>
-      <div class="controls">
-        <button class="pill" data-days="7">7d</button>
-        <button class="pill active" data-days="30">30d</button>
-        <button class="pill" data-days="90">90d</button>
-        <button id="refreshBtn">↻ Atualizar</button>
-      </div>
-    </div>
+  <div class="container">
 
-    <canvas id="salesChart"></canvas>
+    <!-- 4 CARDS SUPERIORES (estáticos) -->
+    <section class="cards">
+      <div class="card">
+        <p class="kpi-title">Total Sales</p>
+        <p class="kpi-value">R$ 2.300,00</p>
+        <p class="kpi-sub">↑ 11 orders in period</p>
+      </div>
+      <div class="card">
+        <p class="kpi-title">Average Order Value</p>
+        <p class="kpi-value">R$ 209,09</p>
+        <p class="kpi-sub">↑ Based on 11 transactions</p>
+      </div>
+      <div class="card">
+        <p class="kpi-title">Number of Transactions</p>
+        <p class="kpi-value">11</p>
+        <p class="kpi-sub">↑ From 2025-09-15 to 2025-10-15</p>
+      </div>
+      <div class="card">
+        <p class="kpi-title">Gross Margin</p>
+        <p class="kpi-value">100.0%</p>
+        <p class="kpi-sub" style="color:#9ca3af">No COGS data available</p>
+      </div>
+    </section>
 
-    <div class="loading" id="loading">Carregando dados...</div>
-    <div class="empty hidden" id="empty">Sem dados para o período selecionado.</div>
-    <div class="error hidden" id="error">Erro ao carregar dados do gráfico.</div>
+    <!-- SALES TREND (API REAL) -->
+    <section class="chart-card">
+      <div class="chart-header">
+        <div>
+          <div class="title">Sales Trend</div>
+          <div class="subtitle" id="subtitle">Sales evolution over the last 30 days</div>
+        </div>
+        <div class="controls">
+          <button class="pill" data-days="7">7d</button>
+          <button class="pill active" data-days="30">30d</button>
+          <button class="pill" data-days="90">90d</button>
+          <button id="refreshBtn">↻ Atualizar</button>
+        </div>
+      </div>
+
+      <div class="chart-wrap">
+        <canvas id="salesChart"></canvas>
+        <div class="loading" id="loading">Carregando dados...</div>
+        <div class="empty hidden" id="empty">Sem dados para o período selecionado.</div>
+        <div class="error hidden" id="error">Erro ao carregar dados do gráfico.</div>
+      </div>
+    </section>
+
+    <!-- 2 BLOCOS INFERIORES (estáticos) -->
+    <section class="bottom">
+      <div class="panel">
+        <h3>Product Affinity</h3>
+        <p class="muted">Products frequently bought together</p>
+
+        <div class="row"><span>Blusa + Saia</span><span>96%</span></div>
+        <div class="bar"><span style="width:96%"></span></div>
+
+        <div class="row"><span>Jaqueta + Calça Social</span><span>81%</span></div>
+        <div class="bar"><span style="width:81%"></span></div>
+
+        <div class="row"><span>Vestido + Acessório</span><span>68%</span></div>
+        <div class="bar"><span style="width:68%"></span></div>
+
+        <div class="row"><span>Tênis + Meia Esportiva</span><span>52%</span></div>
+        <div class="bar"><span style="width:52%"></span></div>
+
+        <div class="row"><span>Camiseta + Calça Jeans</span><span>43%</span></div>
+        <div class="bar"><span style="width:43%"></span></div>
+      </div>
+
+      <div class="panel">
+        <h3>Cross-Selling Insights</h3>
+        <p class="muted">Recommendations based on purchase patterns</p>
+
+        <div class="insight" style="background:#eef2ff;">
+          <div class="tag">📈 High Opportunity</div>
+          <div class="txt">Customers who bought t-shirts have a <b>73% chance</b> of buying pants in the same session.</div>
+        </div>
+
+        <div class="insight" style="background:#f7fee7;">
+          <div class="tag">💡 Recommendation</div>
+          <div class="txt">Add a <b>“Complete the look”</b> banner on t-shirt product pages.</div>
+        </div>
+
+        <div class="insight" style="background:#fffbeb;">
+          <div class="tag">📊 Trend</div>
+          <div class="txt">Accessory sales increased <b>45%</b> when offered together with dresses.</div>
+        </div>
+      </div>
+    </section>
   </div>
 
+  <!-- JS DO SALES TREND (API REAL + CONTROLES) -->
   <script>
     const ctx = document.getElementById('salesChart').getContext('2d');
     const loadingEl = document.getElementById('loading');
@@ -160,6 +312,9 @@
           }
         }
       });
+
+      // avisa o iframe para ajustar a altura quando o gráfico renderizar
+      setTimeout(sendHeight, 50);
     }
 
     async function load(days){
@@ -169,7 +324,7 @@
 
       show('loading');
       const points = await fetchPoints(days);
-      if(points === null){ show('error'); return; }
+      if(points === null){ show('error'); sendHeight(); return; }
       if(!points.length){ show('empty'); renderChart([]); return; }
       show('');
       renderChart(points);
@@ -178,6 +333,17 @@
     pills.forEach(p=>p.addEventListener('click', ()=>load(Number(p.dataset.days))));
     refreshBtn.addEventListener('click', ()=>load(currentDays));
 
+    // AUTO HEIGHT para o embed no Noloco
+    function sendHeight(){
+      const h = document.documentElement.scrollHeight;
+      window.parent.postMessage({ iframeHeight: h }, '*');
+    }
+    window.addEventListener('load', sendHeight);
+    window.addEventListener('resize', sendHeight);
+    const mo = new MutationObserver(sendHeight);
+    mo.observe(document.body, { childList:true, subtree:true });
+
+    // inicia com 30d
     load(30);
   </script>
 </body>
