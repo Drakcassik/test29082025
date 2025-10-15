@@ -1,79 +1,29 @@
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Sales Trend</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
-    :root {
-      --accent: #8B5CF6;
-      --text: #111827;
-      --muted: #6b7280;
+    :root { --accent:#8B5CF6; --text:#111827; --muted:#6b7280; }
+    html,body{margin:0;padding:0;background:transparent;font-family:Inter,system-ui,-apple-system,sans-serif;}
+    .chart-wrapper{width:100%;height:420px;position:relative;box-sizing:border-box}
+    .chart-header{display:flex;justify-content:space-between;align-items:center;margin:0 0 10px 0}
+    .title{font-size:1.1rem;font-weight:600;color:var(--text)}
+    .subtitle{font-size:.85rem;color:var(--muted);margin-top:2px}
+    .controls{display:flex;gap:8px;align-items:center}
+    .pill{border:none;border-radius:8px;padding:6px 12px;font-size:.85rem;cursor:pointer;background:#f3f4f6;color:#111827;transition:.15s}
+    .pill:hover{background:#e5e7eb}
+    .pill.active{background:var(--accent);color:#fff}
+    #refreshBtn{border:none;border-radius:8px;padding:6px 12px;font-size:.85rem;background:#f3f4f6;color:#111827}
+    #refreshBtn:hover{background:#e5e7eb}
+    #salesChart{width:100%!important;height:360px!important}
+    .loading,.empty,.error{
+      position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+      color:var(--muted);font-size:.95rem;text-align:center;padding:16px
     }
-
-    body {
-      font-family: 'Inter', system-ui, -apple-system, sans-serif;
-      background: transparent;
-      margin: 0;
-      padding: 0;
-    }
-
-    .chart-wrapper {
-      width: 100%;
-      height: 420px;
-      border-radius: 14px;
-      box-sizing: border-box;
-      position: relative;
-    }
-
-    .chart-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 10px;
-    }
-
-    .chart-header .title {
-      font-size: 1.1rem;
-      font-weight: 600;
-      color: var(--text);
-    }
-
-    .chart-header .subtitle {
-      font-size: 0.85rem;
-      color: var(--muted);
-      margin-top: 2px;
-    }
-
-    #refreshBtn {
-      background: #f3f4f6;
-      color: #111827;
-      border: none;
-      padding: 6px 12px;
-      border-radius: 8px;
-      cursor: pointer;
-      font-size: 0.85rem;
-      transition: all 0.2s ease;
-    }
-
-    #refreshBtn:hover {
-      background: #e5e7eb;
-    }
-
-    #salesChart {
-      width: 100% !important;
-      height: 360px !important;
-    }
-
-    .loading {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      font-size: 0.95rem;
-      color: var(--muted);
-    }
+    .hidden{display:none!important}
   </style>
 </head>
 <body>
@@ -81,67 +31,103 @@
     <div class="chart-header">
       <div>
         <div class="title">Sales Trend</div>
-        <div class="subtitle">Sales evolution over the last 30 days</div>
+        <div class="subtitle" id="subtitle">Sales evolution over the last 30 days</div>
       </div>
-      <button id="refreshBtn">↻ Atualizar</button>
+      <div class="controls">
+        <button class="pill" data-days="7">7d</button>
+        <button class="pill active" data-days="30">30d</button>
+        <button class="pill" data-days="90">90d</button>
+        <button id="refreshBtn">↻ Atualizar</button>
+      </div>
     </div>
+
     <canvas id="salesChart"></canvas>
+
     <div class="loading" id="loading">Carregando dados...</div>
+    <div class="empty hidden" id="empty">Sem dados para o período selecionado.</div>
+    <div class="error hidden" id="error">Erro ao carregar dados do gráfico.</div>
   </div>
 
   <script>
-    const ctx = document.getElementById("salesChart").getContext("2d");
-    const loadingEl = document.getElementById("loading");
-    const refreshBtn = document.getElementById("refreshBtn");
-    const API_URL = "https://boketto-api-proxy.contatolucasmartins.workers.dev/analytics/sales-trend?days=30&metric=gross";
+    const ctx = document.getElementById('salesChart').getContext('2d');
+    const loadingEl = document.getElementById('loading');
+    const emptyEl   = document.getElementById('empty');
+    const errorEl   = document.getElementById('error');
+    const subtitleEl= document.getElementById('subtitle');
+    const pills = Array.from(document.querySelectorAll('.pill'));
+    const refreshBtn = document.getElementById('refreshBtn');
 
+    const API_BASE = 'https://boketto-api-proxy.contatolucasmartins.workers.dev';
+    // endpoint principal (gross). Se sua API exigir outra métrica, pode trocar aqui.
+    const mainUrl = (days)=> `${API_BASE}/analytics/sales-trend?days=${days}&metric=gross`;
+    // fallback opcional (status=paid)
+    const fallbackUrl = (days)=> `${API_BASE}/analytics/sales-trend-fallback?days=${days}&status=paid`;
+
+    let currentDays = 30;
     let chart;
 
-    async function fetchData() {
-      try {
-        loadingEl.style.display = "block";
-        const response = await fetch(API_URL);
-        if (!response.ok) throw new Error("Erro ao buscar dados da API");
-        const data = await response.json();
-        return data.points?.map(p => ({
-          date: p.date,
-          revenue: Number(p.revenue) || 0
-        })) || [];
-      } catch (e) {
-        console.error(e);
-        return [];
-      } finally {
-        loadingEl.style.display = "none";
-      }
+    function show(state){
+      loadingEl.classList.toggle('hidden', state!=='loading');
+      emptyEl.classList.toggle('hidden',   state!=='empty');
+      errorEl.classList.toggle('hidden',   state!=='error');
     }
 
-    function renderChart(data) {
-      if (chart) chart.destroy();
+    async function fetchPoints(days){
+      // tenta principal → se falhar, tenta fallback
+      try{
+        const r = await fetch(mainUrl(days), { cache: 'no-store' });
+        if(!r.ok) throw new Error('HTTP '+r.status);
+        const j = await r.json();
+        if(j && Array.isArray(j.points)) return j.points;
+        // se vier sem points, tenta fallback
+      }catch(e){
+        console.warn('Main API falhou:', e);
+      }
+      try{
+        const r2 = await fetch(fallbackUrl(days), { cache: 'no-store' });
+        if(!r2.ok) throw new Error('HTTP '+r2.status);
+        const j2 = await r2.json();
+        if(j2 && Array.isArray(j2.points)) return j2.points;
+      }catch(e2){
+        console.warn('Fallback API falhou:', e2);
+      }
+      return null; // sinaliza erro geral
+    }
 
-      const labels = data.map(d => {
-        const date = new Date(d.date);
-        return `${String(date.getDate()).padStart(2, "0")}/${String(date.getMonth() + 1).padStart(2, "0")}`;
+    function renderChart(points){
+      if(chart) chart.destroy();
+
+      const data = (points||[]).map(p=>({
+        date: p.date,
+        revenue: Number(p.revenue)||0
+      }));
+
+      const labels = data.map(d=>{
+        const dt = new Date(d.date);
+        const dd = String(dt.getDate()).padStart(2,'0');
+        const mm = String(dt.getMonth()+1).padStart(2,'0');
+        return `${dd}/${mm}`;
       });
-      const values = data.map(d => d.revenue);
+      const values = data.map(d=>d.revenue);
 
       chart = new Chart(ctx, {
-        type: "line",
+        type: 'line',
         data: {
           labels,
           datasets: [{
-            label: "Total de Vendas",
+            label: 'Total de Vendas',
             data: values,
-            borderColor: "#8B5CF6",
+            borderColor: '#8B5CF6',
             borderWidth: 2,
-            fill: true,
             tension: 0.35,
             pointRadius: 2.5,
-            pointBackgroundColor: "#8B5CF6",
-            backgroundColor: (ctx) => {
-              const gradient = ctx.chart.ctx.createLinearGradient(0, 0, 0, 300);
-              gradient.addColorStop(0, "rgba(139,92,246,0.25)");
-              gradient.addColorStop(1, "rgba(139,92,246,0)");
-              return gradient;
+            pointBackgroundColor: '#8B5CF6',
+            fill: true,
+            backgroundColor: (c)=>{
+              const g = c.chart.ctx.createLinearGradient(0,0,0,300);
+              g.addColorStop(0,'rgba(139,92,246,0.25)');
+              g.addColorStop(1,'rgba(139,92,246,0)');
+              return g;
             }
           }]
         },
@@ -149,51 +135,46 @@
           responsive: true,
           maintainAspectRatio: false,
           plugins: {
-            legend: { display: false },
+            legend: { display:false },
             tooltip: {
-              backgroundColor: "#fff",
-              titleColor: "#111827",
-              bodyColor: "#111827",
-              borderColor: "#e5e7eb",
-              borderWidth: 1,
-              padding: 10,
-              displayColors: false,
+              backgroundColor:'#fff', titleColor:'#111827', bodyColor:'#111827',
+              borderColor:'#e5e7eb', borderWidth:1, padding:10, displayColors:false,
               callbacks: {
-                label: (ctx) => " " + ctx.formattedValue.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }),
-                title: (items) => "Data: " + items[0].label
+                label: (ctx)=> ' '+Number(ctx.parsed.y).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}),
+                title: (items)=> 'Data: '+items[0].label
               }
             }
           },
           scales: {
-            x: {
-              grid: { display: false },
-              ticks: {
-                color: "#6b7280",
-                font: { size: 12 }
-              }
-            },
-            y: {
-              grid: { color: "#f0f0f0" },
-              ticks: {
-                color: "#6b7280",
-                font: { size: 12 },
-                callback: (v) => v.toLocaleString("pt-BR", { style: "currency", currency: "BRL" })
-              }
-            }
+            x: { grid:{ display:false }, ticks:{ color:'#6b7280', font:{ size:12 } } },
+            y: { grid:{ color:'#f0f0f0' }, ticks:{
+              color:'#6b7280', font:{ size:12 },
+              callback:(v)=> Number(v).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})
+            }}
           }
         }
       });
     }
 
-    async function loadChart() {
-      const data = await fetchData();
-      renderChart(data);
+    async function load(days){
+      currentDays = days;
+      pills.forEach(p=>p.classList.toggle('active', Number(p.dataset.days)===days));
+      subtitleEl.textContent = `Sales evolution over the last ${days} days`;
+
+      show('loading');
+      const points = await fetchPoints(days);
+      if(points === null){ show('error'); return; }
+      if(!points.length){ show('empty'); renderChart([]); return; }
+      show(''); // esconde estados
+      renderChart(points);
     }
 
-    refreshBtn.addEventListener("click", loadChart);
+    // Controles
+    pills.forEach(p=>p.addEventListener('click', ()=>load(Number(p.dataset.days))));
+    refreshBtn.addEventListener('click', ()=>load(currentDays));
 
-    // Inicializa com dados reais automaticamente
-    loadChart();
+    // Carrega automaticamente em 30d
+    load(30);
   </script>
 </body>
 </html>
