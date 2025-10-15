@@ -8,10 +8,22 @@
   <style>
     :root { --accent:#8B5CF6; --text:#111827; --muted:#6b7280; }
     html,body{margin:0;padding:0;background:transparent;font-family:Inter,system-ui,-apple-system,sans-serif;}
-    .chart-wrapper{width:100%;height:420px;position:relative;box-sizing:border-box}
-    .chart-header{display:flex;justify-content:space-between;align-items:center;margin:0 0 10px 0}
-    .title{font-size:1.1rem;font-weight:600;color:var(--text)}
-    .subtitle{font-size:.85rem;color:var(--muted);margin-top:2px}
+    .chart-wrapper{
+      width:100%;
+      height:420px;
+      position:relative;
+      box-sizing:border-box;
+      padding:5px; /* leve espaçamento geral */
+    }
+    .chart-header{
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-start;
+      margin-bottom:30px; /* espaço entre cabeçalho e gráfico */
+      padding:20px 30px 0 30px; /* padding solicitado - cima/lados */
+    }
+    .title{font-size:1.1rem;font-weight:600;color:var(--text);margin:0;}
+    .subtitle{font-size:.85rem;color:var(--muted);margin-top:4px;}
     .controls{display:flex;gap:8px;align-items:center}
     .pill{border:none;border-radius:8px;padding:6px 12px;font-size:.85rem;cursor:pointer;background:#f3f4f6;color:#111827;transition:.15s}
     .pill:hover{background:#e5e7eb}
@@ -58,9 +70,7 @@
     const refreshBtn = document.getElementById('refreshBtn');
 
     const API_BASE = 'https://boketto-api-proxy.contatolucasmartins.workers.dev';
-    // endpoint principal (gross). Se sua API exigir outra métrica, pode trocar aqui.
     const mainUrl = (days)=> `${API_BASE}/analytics/sales-trend?days=${days}&metric=gross`;
-    // fallback opcional (status=paid)
     const fallbackUrl = (days)=> `${API_BASE}/analytics/sales-trend-fallback?days=${days}&status=paid`;
 
     let currentDays = 30;
@@ -73,13 +83,11 @@
     }
 
     async function fetchPoints(days){
-      // tenta principal → se falhar, tenta fallback
       try{
         const r = await fetch(mainUrl(days), { cache: 'no-store' });
         if(!r.ok) throw new Error('HTTP '+r.status);
         const j = await r.json();
         if(j && Array.isArray(j.points)) return j.points;
-        // se vier sem points, tenta fallback
       }catch(e){
         console.warn('Main API falhou:', e);
       }
@@ -91,7 +99,7 @@
       }catch(e2){
         console.warn('Fallback API falhou:', e2);
       }
-      return null; // sinaliza erro geral
+      return null;
     }
 
     function renderChart(points){
@@ -104,9 +112,7 @@
 
       const labels = data.map(d=>{
         const dt = new Date(d.date);
-        const dd = String(dt.getDate()).padStart(2,'0');
-        const mm = String(dt.getMonth()+1).padStart(2,'0');
-        return `${dd}/${mm}`;
+        return `${String(dt.getDate()).padStart(2,'0')}/${String(dt.getMonth()+1).padStart(2,'0')}`;
       });
       const values = data.map(d=>d.revenue);
 
@@ -165,15 +171,13 @@
       const points = await fetchPoints(days);
       if(points === null){ show('error'); return; }
       if(!points.length){ show('empty'); renderChart([]); return; }
-      show(''); // esconde estados
+      show('');
       renderChart(points);
     }
 
-    // Controles
     pills.forEach(p=>p.addEventListener('click', ()=>load(Number(p.dataset.days))));
     refreshBtn.addEventListener('click', ()=>load(currentDays));
 
-    // Carrega automaticamente em 30d
     load(30);
   </script>
 </body>
