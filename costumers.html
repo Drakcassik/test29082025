@@ -100,7 +100,7 @@
 
     canvas {
       width:100%;
-      height:clamp(200px,26vh,280px) !important;
+      height:clamp(220px,28vh,300px) !important;
       max-width:100%;
       display:block;
       margin:0 auto;
@@ -115,7 +115,7 @@
 
     @media (max-width: 900px) {
       .charts-grid {grid-template-columns: 1fr;}
-      canvas {height:clamp(180px,32vh,240px) !important;}
+      canvas {height:clamp(240px,40vh,360px) !important;}
     }
 
     /* Mobile Scroll */
@@ -129,6 +129,12 @@
         min-height:100vh;
         overflow-x:hidden;
       }
+      .chart-section { padding:16px 16px; }
+      .charts-grid { gap:16px; }
+      .title { font-size:1rem; }
+      .subtitle { font-size:.8rem; }
+      /* Aumenta ainda mais a altura dos gráficos em telas muito pequenas */
+      canvas { height:clamp(280px,46vh,420px) !important; }
     }
   </style>
 </head>
@@ -224,6 +230,8 @@
   </div>
 
   <script>
+    const isMobile = () => window.matchMedia('(max-width: 768px)').matches;
+
     const API = "https://airtablebokettostore.contatolucasmartins.workers.dev/airtable/Customers";
     const charts = {}; // armazena instâncias dos gráficos sem conflitar com window
     let allData = [];
@@ -260,6 +268,11 @@
       const safeLabels = (Array.isArray(labels) && labels.length) ? labels : ['Sem dados'];
       const safeValues = hasValues ? values : [0];
 
+      // Mobile helpers
+      const mobile = isMobile();
+      const truncate = (txt, n=12) => (typeof txt === 'string' && txt.length > n) ? txt.slice(0, n) + '…' : txt;
+      const processedLabels = mobile && id !== 'growthChart' ? safeLabels.map(l => truncate(l)) : safeLabels;
+
       // Configuração específica por tipo de gráfico
       const dataset = { data: safeValues };
       if(type === 'line'){
@@ -274,24 +287,62 @@
         dataset.backgroundColor = colors;
         dataset.borderRadius = type==='bar' ? 8 : 0;
         dataset.borderWidth = 0;
+        dataset.maxBarThickness = mobile ? 28 : 36;
       }
+
+      // Index axis condicional (barras horizontais no mobile para IDs específicos)
+      const useHorizontalBars = mobile && (id === 'topCustomersChart' || id === 'countryChart');
 
       const options = {
         responsive: true,
         maintainAspectRatio: false,
+        indexAxis: useHorizontalBars ? 'y' : 'x',
         plugins: {
-          legend: { position: 'bottom', labels: { color:'#374151' } },
+          legend: {
+            display: true,
+            position: 'bottom',
+            labels: {
+              color:'#374151',
+              boxWidth: 12,
+              boxHeight: 12,
+              padding: 10,
+              font: mobile ? { size: 11 } : { size: 12 }
+            }
+          },
           tooltip: { enabled: true }
         },
+        layout: { padding: mobile ? 4 : 0 },
         scales: (type==='bar' || type==='line') ? {
-          x: { ticks: { color:'#6b7280' } },
-          y: { ticks: { color:'#6b7280' }, beginAtZero: type==='bar' }
-        } : {}
+          x: {
+            ticks: {
+              color:'#6b7280',
+              autoSkip: true,
+              maxTicksLimit: mobile ? 4 : 10,
+              maxRotation: mobile ? 45 : 0,
+              minRotation: mobile ? 45 : 0,
+              font: mobile ? { size: 10 } : { size: 12 }
+            },
+            grid: { drawBorder:false, color:'rgba(0,0,0,.06)' }
+          },
+          y: {
+            ticks: {
+              color:'#6b7280',
+              autoSkip: true,
+              maxTicksLimit: mobile ? 5 : 8,
+              font: mobile ? { size: 10 } : { size: 12 }
+            },
+            beginAtZero: type==='bar',
+            grid: { drawBorder:false, color:'rgba(0,0,0,.06)' }
+          }
+        } : {
+          // Doughnut / Pie
+        },
+        cutout: type==='doughnut' ? (mobile ? '68%' : '60%') : undefined
       };
 
       charts[id] = new Chart(ctx,{
         type,
-        data:{ labels: safeLabels, datasets:[ dataset ] },
+        data:{ labels: processedLabels, datasets:[ dataset ] },
         options
       });
     }
@@ -391,6 +442,15 @@
         });
       }
     }
+
+    // Re-renderiza em resize (debounce) para aplicar mudanças de mobile/desktop
+    let __resizeTimer = null;
+    window.addEventListener('resize', () => {
+      clearTimeout(__resizeTimer);
+      __resizeTimer = setTimeout(() => {
+        renderAllCharts();
+      }, 200);
+    });
 
     setupControls();
     loadData();
