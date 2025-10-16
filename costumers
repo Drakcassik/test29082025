@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Boketto – Customer Analytics</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script>
+    // Garante que tipos/escalas do Chart.js estão registrados
+    if(window.Chart && Chart.register && Chart.registerables){
+      Chart.register(...Chart.registerables);
+    }
+  </script>
+  <style>
+    :root {
+      --accent: #8B5CF6;
+      --text: #111827;
+      --muted: #6b7280;
+      --card: #ffffff;
+      --border: rgba(0,0,0,.06);
+      --shadow: 0 8px 20px rgba(0,0,0,.05);
+      --radius: 14px;
+    }
+
+    html,body {
+      margin:0;
+      padding:0;
+      background:transparent;
+      font-family: Inter, system-ui, -apple-system, sans-serif;
+      color: var(--text);
+    }
+
+    .container {
+      width:100%;
+      box-sizing:border-box;
+      padding:6px 6px 20px;
+    }
+
+    /* KPI Cards */
+    .cards {
+      display:grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap:16px;
+      margin-bottom:18px;
+    }
+    @media(max-width:1200px){ .cards{ grid-template-columns: repeat(2, 1fr);} }
+    @media(max-width:640px){  .cards{ grid-template-columns: 1fr; } }
+
+    .card {
+      background: var(--card);
+      border:1px solid var(--border);
+      box-shadow: var(--shadow);
+      border-radius: var(--radius);
+      padding:18px 20px;
+    }
+    .kpi-title {font-size:.95rem;color:var(--muted);margin:0 0 8px;}
+    .kpi-value {font-size:1.6rem;font-weight:700;margin:0 0 6px;}
+    .kpi-sub {font-size:.85rem;margin:0;}
+
+    /* Controls */
+    .controls {
+      display:flex;
+      justify-content:flex-end;
+      gap:8px;
+      margin-bottom:12px;
+    }
+    .pill {
+      border:none;
+      border-radius:8px;
+      padding:6px 12px;
+      font-size:.85rem;
+      cursor:pointer;
+      background:#f3f4f6;
+      color:#111827;
+      transition:.15s;
+    }
+    .pill:hover {background:#e5e7eb;}
+    .pill.active {background:var(--accent);color:#fff;}
+
+    /* Chart Wrappers */
+    .chart-section {
+      background: var(--card);
+      border:1px solid var(--border);
+      box-shadow: var(--shadow);
+      border-radius: var(--radius);
+      padding:20px 24px;
+      margin-bottom:20px;
+      overflow:hidden;
+    }
+
+    .chart-header {
+      display:flex;
+      justify-content:space-between;
+      align-items:flex-start;
+      margin-bottom:12px;
+    }
+
+    .title {font-size:1.1rem;font-weight:600;margin:0;}
+    .subtitle {font-size:.85rem;color:var(--muted);margin-top:4px;}
+
+    canvas {
+      width:100%;
+      height:clamp(200px,26vh,280px) !important;
+      max-width:100%;
+      display:block;
+      margin:0 auto;
+    }
+
+    .charts-grid {
+      display:grid;
+      grid-template-columns: 1.6fr 1fr;
+      gap:20px;
+      align-items:stretch;
+    }
+
+    @media (max-width: 900px) {
+      .charts-grid {grid-template-columns: 1fr;}
+      canvas {height:clamp(180px,32vh,240px) !important;}
+    }
+
+    /* Mobile Scroll */
+    @media (max-width: 768px) {
+      html, body {
+        height:100%;
+        overflow-y:auto;
+        -webkit-overflow-scrolling:touch;
+      }
+      .container {
+        min-height:100vh;
+        overflow-x:hidden;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- KPI Cards -->
+    <section class="cards">
+      <div class="card">
+        <p class="kpi-title">New Customers</p>
+        <p class="kpi-value" id="kpi-new">+0</p>
+        <p class="kpi-sub" style="color:#10b981">↑ vs last month</p>
+      </div>
+      <div class="card">
+        <p class="kpi-title">Returning Customers</p>
+        <p class="kpi-value" id="kpi-return">0%</p>
+        <p class="kpi-sub" style="color:#10b981">↑ +0% vs last month</p>
+      </div>
+      <div class="card">
+        <p class="kpi-title">Average Order Value</p>
+        <p class="kpi-value" id="kpi-aov">$0</p>
+        <p class="kpi-sub" style="color:#10b981">↑ +0%</p>
+      </div>
+      <div class="card">
+        <p class="kpi-title">Total Customers</p>
+        <p class="kpi-value" id="kpi-total">0</p>
+        <p class="kpi-sub" style="color:#9ca3af">Active as of Oct 2025</p>
+      </div>
+    </section>
+
+    <!-- Period Controls -->
+    <div class="controls">
+      <button class="pill" data-days="7">7d</button>
+      <button class="pill active" data-days="30">30d</button>
+      <button class="pill" data-days="90">90d</button>
+      <button id="refreshBtn" class="pill">↻ Refresh</button>
+    </div>
+
+    <!-- Customer Growth -->
+    <section class="chart-section">
+      <div class="chart-header">
+        <div>
+          <div class="title">Customer Growth Over Time</div>
+          <div class="subtitle">Evolution of new customers in selected period</div>
+        </div>
+      </div>
+      <canvas id="growthChart"></canvas>
+    </section>
+
+    <!-- NEW CHARTS GRID -->
+    <section class="charts-grid">
+      <div class="chart-section">
+        <div class="chart-header">
+          <div>
+            <div class="title">Top Customers by Spending</div>
+            <div class="subtitle">Based on “Total Spent” field</div>
+          </div>
+        </div>
+        <canvas id="topCustomersChart"></canvas>
+      </div>
+
+      <div class="chart-section">
+        <div class="chart-header">
+          <div>
+            <div class="title">Customers by Country</div>
+            <div class="subtitle">Distribution across regions</div>
+          </div>
+        </div>
+        <canvas id="countryChart"></canvas>
+      </div>
+    </section>
+
+    <section class="charts-grid">
+      <div class="chart-section">
+        <div class="chart-header">
+          <div>
+            <div class="title">Marketing Opt-In</div>
+            <div class="subtitle">Customers who accept marketing</div>
+          </div>
+        </div>
+        <canvas id="marketingChart"></canvas>
+      </div>
+
+      <div class="chart-section">
+        <div class="chart-header">
+          <div>
+            <div class="title">Email Verified</div>
+            <div class="subtitle">Verification status</div>
+          </div>
+        </div>
+        <canvas id="emailChart"></canvas>
+      </div>
+    </section>
+  </div>
+
+  <script>
+    const API = "https://airtablebokettostore.contatolucasmartins.workers.dev/airtable/Customers";
+    const charts = {}; // armazena instâncias dos gráficos sem conflitar com window
+    let allData = [];
+    let periodDays = 30;
+
+    async function fetchAllCustomers(){
+      let all = [], offset = null;
+      do {
+        const res = await fetch(`${API}${offset ? '?offset='+offset : ''}`);
+        const json = await res.json();
+        if(json.records) all = all.concat(json.records);
+        offset = json.offset;
+      } while(offset);
+      return all;
+    }
+
+    function groupBy(records, field){
+      const map = {};
+      for(const r of records){
+        const val = r?.fields?.[field];
+        let key = (val === undefined || val === null || val === '') ? 'Unknown' : val;
+        if(typeof key === 'boolean') key = key ? 'True' : 'False';
+        map[key] = (map[key]||0)+1;
+      }
+      return map;
+    }
+
+    function renderChart(id,type,labels,values,colors){
+      const ctx = document.getElementById(id).getContext('2d');
+      if(charts[id]) charts[id].destroy();
+
+      // Fallback quando não há dados válidos
+      const hasValues = Array.isArray(values) && values.length > 0;
+      const safeLabels = (Array.isArray(labels) && labels.length) ? labels : ['Sem dados'];
+      const safeValues = hasValues ? values : [0];
+
+      // Configuração específica por tipo de gráfico
+      const dataset = { data: safeValues };
+      if(type === 'line'){
+        dataset.backgroundColor = colors[0];
+        dataset.borderColor = colors[0];
+        dataset.borderWidth = 2;
+        dataset.tension = 0.3;
+        dataset.pointRadius = 2;
+        dataset.pointHoverRadius = 4;
+        dataset.fill = false;
+      } else {
+        dataset.backgroundColor = colors;
+        dataset.borderRadius = type==='bar' ? 8 : 0;
+        dataset.borderWidth = 0;
+      }
+
+      const options = {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'bottom', labels: { color:'#374151' } },
+          tooltip: { enabled: true }
+        },
+        scales: (type==='bar' || type==='line') ? {
+          x: { ticks: { color:'#6b7280' } },
+          y: { ticks: { color:'#6b7280' }, beginAtZero: type==='bar' }
+        } : {}
+      };
+
+      charts[id] = new Chart(ctx,{
+        type,
+        data:{ labels: safeLabels, datasets:[ dataset ] },
+        options
+      });
+    }
+
+    function filterByDays(records, days){
+      if(!days || !Number.isFinite(days)) return records;
+      const now = new Date();
+      const since = new Date(now.getTime() - days*24*60*60*1000);
+      return records.filter(r => {
+        const t = r.createdTime ? new Date(r.createdTime) : null;
+        return t && t >= since && t <= now;
+      });
+    }
+
+    function renderAllCharts(){
+      const periodData = filterByDays(allData, periodDays);
+
+      // KPIs baseados no período selecionado
+      const newCount = periodData.length;
+      const returningCount = periodData.filter(r => (r.fields?.['Total Spent']||0) > 0).length;
+      const returningPct = newCount ? Math.round((returningCount / newCount) * 100) : 0;
+      const aovValues = periodData.map(r => r.fields?.['Total Spent']).filter(v => typeof v === 'number');
+      const aov = aovValues.length ? aovValues.reduce((a,b)=>a+b,0) / aovValues.length : 0;
+
+      document.getElementById('kpi-new').textContent = `+${newCount.toLocaleString()}`;
+      document.getElementById('kpi-return').textContent = `${returningPct}%`;
+      document.getElementById('kpi-aov').textContent = `$${aov.toFixed(2)}`;
+      document.getElementById('kpi-total').textContent = newCount.toLocaleString();
+
+      // Growth by creation date no período
+      const growth = {};
+      for(const r of periodData){
+        const d = r.createdTime?.split('T')[0];
+        if(d) growth[d]=(growth[d]||0)+1;
+      }
+      const labels = Object.keys(growth).sort();
+      const values = labels.map(k=>growth[k]);
+      renderChart('growthChart','line',labels,values,['#8B5CF6']);
+
+      // Top Customers by Total Spent no período (inclui valores zero)
+      const top = periodData
+        .filter(r => r.fields && Object.prototype.hasOwnProperty.call(r.fields,'Total Spent'))
+        .sort((a,b)=> (b.fields['Total Spent']||0) - (a.fields['Total Spent']||0))
+        .slice(0,10);
+      renderChart(
+        'topCustomersChart',
+        'bar',
+        top.map(r=> r.fields['Name'] || r.fields['Email'] || r.id || 'Sem nome'),
+        top.map(r=> Number(r.fields['Total Spent']||0)),
+        ['#8B5CF6']
+      );
+
+      // Customers by Country no período
+      const byCountry = groupBy(periodData,'Country');
+      renderChart('countryChart','bar',Object.keys(byCountry),Object.values(byCountry),['#22C55E']);
+
+      // Marketing Opt-In no período
+      const marketing = groupBy(periodData,'Accepts Marketing');
+      renderChart('marketingChart','doughnut',Object.keys(marketing),Object.values(marketing),['#8B5CF6','#E5E7EB']);
+
+      // Email Verified no período
+      const verified = groupBy(periodData,'Email Verified');
+      renderChart('emailChart','doughnut',Object.keys(verified),Object.values(verified),['#22C55E','#E5E7EB']);
+    }
+
+    async function loadData(){
+      let data = [];
+      try{
+        data = await fetchAllCustomers();
+      }catch(err){
+        console.error('Falha ao buscar clientes da API:', err);
+      }
+      allData = data;
+      renderAllCharts();
+    }
+
+    function setupControls(){
+      const periodButtons = document.querySelectorAll('.pill[data-days]');
+      periodButtons.forEach(btn => {
+        btn.addEventListener('click', () => {
+          periodButtons.forEach(b=>b.classList.remove('active'));
+          btn.classList.add('active');
+          periodDays = Number(btn.dataset.days);
+          renderAllCharts();
+        });
+      });
+
+      // Sincroniza estado visual inicial com o período padrão
+      periodButtons.forEach(b=>b.classList.remove('active'));
+      const currentBtn = document.querySelector(`.pill[data-days="${periodDays}"]`);
+      if(currentBtn) currentBtn.classList.add('active');
+
+      const refreshBtn = document.getElementById('refreshBtn');
+      if(refreshBtn){
+        refreshBtn.addEventListener('click', async () => {
+          await loadData();
+        });
+      }
+    }
+
+    setupControls();
+    loadData();
+  </script>
+</body>
+</html>
