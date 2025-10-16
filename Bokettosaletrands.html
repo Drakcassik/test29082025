@@ -71,6 +71,8 @@
     #refreshBtn{border:none;border-radius:8px;padding:6px 12px;font-size:.85rem;background:#f3f4f6;color:#111827}
     #refreshBtn:hover{background:#e5e7eb}
     #salesChart{width:100%!important;height:360px!important}
+    /* Altura fixa para novos gráficos para evitar reflow/loop de resize */
+    #productRankingChart,#deviceTypeChart{width:100%!important;height:360px!important;display:block}
     .loading,.empty,.error{
       position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
       color:var(--muted);font-size:.95rem;text-align:center;padding:16px
@@ -184,48 +186,21 @@
       </div>
     </section>
 
-    <!-- 2 BLOCOS INFERIORES (estáticos) -->
+    <!-- NOVOS GRÁFICOS (movidos para baixo do Sales Trend) -->
     <section class="bottom">
       <div class="panel">
-        <h3>Product Affinity</h3>
-        <p class="muted">Products frequently bought together</p>
-
-        <div class="row"><span>Blusa + Saia</span><span>96%</span></div>
-        <div class="bar"><span style="width:96%"></span></div>
-
-        <div class="row"><span>Jaqueta + Calça Social</span><span>81%</span></div>
-        <div class="bar"><span style="width:81%"></span></div>
-
-        <div class="row"><span>Vestido + Acessório</span><span>68%</span></div>
-        <div class="bar"><span style="width:68%"></span></div>
-
-        <div class="row"><span>Tênis + Meia Esportiva</span><span>52%</span></div>
-        <div class="bar"><span style="width:52%"></span></div>
-
-        <div class="row"><span>Camiseta + Calça Jeans</span><span>43%</span></div>
-        <div class="bar"><span style="width:43%"></span></div>
+        <h3>Product Ranking – Mais Vendidos</h3>
+        <p class="muted">Top produtos por quantidade vendida</p>
+        <canvas id="productRankingChart"></canvas>
       </div>
-
       <div class="panel">
-        <h3>Cross-Selling Insights</h3>
-        <p class="muted">Recommendations based on purchase patterns</p>
-
-        <div class="insight" style="background:#eef2ff;">
-          <div class="tag">📈 High Opportunity</div>
-          <div class="txt">Customers who bought t-shirts have a <b>73% chance</b> of buying pants in the same session.</div>
-        </div>
-
-        <div class="insight" style="background:#f7fee7;">
-          <div class="tag">💡 Recommendation</div>
-          <div class="txt">Add a <b>“Complete the look”</b> banner on t-shirt product pages.</div>
-        </div>
-
-        <div class="insight" style="background:#fffbeb;">
-          <div class="tag">📊 Trend</div>
-          <div class="txt">Accessory sales increased <b>45%</b> when offered together with dresses.</div>
-        </div>
+        <h3>Sessions by Device Type</h3>
+        <p class="muted">Distribuição de sessões por dispositivo</p>
+        <canvas id="deviceTypeChart"></canvas>
       </div>
     </section>
+
+    <!-- Painéis removidos: Product Affinity e Cross-Selling Insights -->
   </div>
 
   <!-- JS DO SALES TREND (API REAL + CONTROLES) -->
@@ -351,17 +326,138 @@
     refreshBtn.addEventListener('click', ()=>load(currentDays));
 
     // AUTO HEIGHT para o embed no Noloco
+    let __lastHeight = 0;
+    let __heightTimer = null;
     function sendHeight(){
-      const h = document.documentElement.scrollHeight;
-      window.parent.postMessage({ iframeHeight: h }, '*');
+      if(__heightTimer) return; // throttle
+      __heightTimer = setTimeout(()=>{
+        __heightTimer = null;
+        const h = Math.ceil(document.documentElement.scrollHeight);
+        if(Math.abs(h - __lastHeight) > 2){
+          __lastHeight = h;
+          window.parent.postMessage({ iframeHeight: h }, '*');
+        }
+      }, 120);
     }
     window.addEventListener('load', sendHeight);
     window.addEventListener('resize', sendHeight);
-    const mo = new MutationObserver(sendHeight);
+    const mo = new MutationObserver(()=>sendHeight());
     mo.observe(document.body, { childList:true, subtree:true });
+
+    // ---- Gráficos adicionais (Product Ranking, Device Type) ----
+    const PRODUCTS_API = 'https://airtablebokettostore.contatolucasmartins.workers.dev/airtable/order-line-items';
+    const DEVICE_API   = 'https://airtablebokettostore.contatolucasmartins.workers.dev/analytics/device-type';
+    let productChart, deviceChart;
+
+    async function fetchAllLineItems(){
+      let all = [], offset = null;
+      do {
+        const url = `${PRODUCTS_API}${offset ? '?offset='+offset : ''}`;
+        const res = await fetch(url, { cache: 'no-store' });
+        const json = await res.json();
+        if(json.records) all = all.concat(json.records);
+        offset = json.offset;
+      } while(offset);
+      return all;
+    }
+
+    function aggregateProductRanking(items){
+      const map = {};
+      items.forEach(r => {
+        const f = r.fields || {};
+        const name = f['Name'] || f['Product'] || f['Title'] || f['name'] || 'Sem nome';
+        const qtyRaw = f['Quantity'] ?? f['quantity'] ?? 1;
+        const qty = Number(qtyRaw);
+        map[name] = (map[name] || 0) + (Number.isFinite(qty) ? qty : 1);
+      });
+      const entries = Object.entries(map).sort((a,b)=>b[1]-a[1]).slice(0,10);
+      return { labels: entries.map(e=>e[0]), values: entries.map(e=>e[1]) };
+    }
+
+    function renderProductRanking(labels, values){
+      const ctx2 = document.getElementById('productRankingChart').getContext('2d');
+      if(productChart) productChart.destroy();
+      productChart = new Chart(ctx2, {
+        type:'bar',
+        data:{ labels, datasets:[{ data: values, backgroundColor:'#8B5CF6', borderWidth:0, maxBarThickness:36 }] },
+        options:{
+          responsive:true, maintainAspectRatio:false, animation:false,
+          plugins:{ legend:{ display:false } },
+          scales:{
+            x:{ ticks:{ color:'#6b7280', font:{ size:12 } }, grid:{ drawBorder:false, color:'rgba(0,0,0,.06)' } },
+            y:{ beginAtZero:true, ticks:{ color:'#6b7280', font:{ size:12 } }, grid:{ drawBorder:false, color:'rgba(0,0,0,.06)' } }
+          }
+        }
+      });
+      setTimeout(sendHeight, 50);
+    }
+
+    async function loadProductRanking(){
+      try{
+        const items = await fetchAllLineItems();
+        const { labels, values } = aggregateProductRanking(items);
+        renderProductRanking(labels, values);
+      }catch(e){
+        console.warn('Falha ao carregar Product Ranking:', e);
+        renderProductRanking(['Sem dados'], [0]);
+      }
+    }
+
+    async function fetchDeviceData(){
+      try{
+        const res = await fetch(DEVICE_API, { cache: 'no-store' });
+        const j = await res.json();
+        let labels=[], values=[];
+        if(Array.isArray(j)){
+          labels = j.map(it => it.device || it.type || it.deviceType || it.name || it.label || 'Unknown');
+          values = j.map(it => Number(it.sessions ?? it.count ?? it.value ?? 0));
+        } else if(Array.isArray(j.data)){
+          labels = j.data.map(it => it.device || it.type || it.deviceType || it.name || it.label || 'Unknown');
+          values = j.data.map(it => Number(it.sessions ?? it.count ?? it.value ?? 0));
+        } else if (j && typeof j === 'object'){
+          labels = Object.keys(j);
+          values = Object.values(j).map(v => Number(v.sessions ?? v.count ?? v.value ?? v));
+        }
+        return { labels, values };
+      }catch(e){
+        console.warn('Falha ao buscar device-type:', e);
+        return { labels:[], values:[] };
+      }
+    }
+
+    function renderDeviceChart(labels, values){
+      const ctx3 = document.getElementById('deviceTypeChart').getContext('2d');
+      if(deviceChart) deviceChart.destroy();
+      const colors = ['#8B5CF6','#22C55E','#E5E7EB','#F59E0B','#60A5FA','#F472B6'];
+      deviceChart = new Chart(ctx3, {
+        type:'doughnut',
+        data:{ labels, datasets:[{ data: values, backgroundColor: colors.slice(0, Math.max(values.length,3)) }] },
+        options:{
+          responsive:true, maintainAspectRatio:false, animation:false,
+          plugins:{
+            legend:{ display:true, position:'bottom', labels:{ color:'#374151', boxWidth:12, boxHeight:12, padding:10, font:{ size:12 } } }
+          },
+          cutout:'60%'
+        }
+      });
+      setTimeout(sendHeight, 50);
+    }
+
+    async function loadDeviceType(){
+      const { labels, values } = await fetchDeviceData();
+      if(!labels.length) renderDeviceChart(['Sem dados'], [0]);
+      else renderDeviceChart(labels, values);
+    }
+
+    function initAdditionalCharts(){
+      loadProductRanking();
+      loadDeviceType();
+    }
 
     // inicia com 30d
     load(30);
+    // carrega gráficos novos
+    initAdditionalCharts();
   </script>
 </body>
 </html>
