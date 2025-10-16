@@ -115,6 +115,23 @@
     .insight .tag{font-size:.8rem;font-weight:600;margin-bottom:6px;display:flex;gap:8px;align-items:center}
     .insight .txt{font-size:.9rem;color:#374151}
 
+    /* --- ADICIONE ISSO AO FINAL DO BLOCO <style> --- */
+
+/* Habilita rolagem vertical apenas no mobile */
+@media (max-width: 768px) {
+  html, body {
+    height: 100%;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch; /* rolagem suave no iOS */
+  }
+
+  .container {
+    min-height: 100vh;
+    overflow-x: hidden; /* evita scroll horizontal */
+  }
+}
+
+
   </style>
 </head>
 <body>
