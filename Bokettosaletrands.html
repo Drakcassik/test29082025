@@ -71,8 +71,82 @@
     #refreshBtn{border:none;border-radius:8px;padding:6px 12px;font-size:.85rem;background:#f3f4f6;color:#111827}
     #refreshBtn:hover{background:#e5e7eb}
     #salesChart{width:100%!important;height:360px!important}
-    /* Altura fixa para novos gráficos para evitar reflow/loop de resize */
-    #productRankingChart,#deviceTypeChart{width:100%!important;height:360px!important;display:block}
+    /* Altura fixa apenas para o ranking (barras). Doughnut será quadrado via aspect ratio. */
+    #productRankingChart{width:100%!important;height:360px!important;display:block}
+    #deviceTypeChart{display:block;width:100%;max-width:260px;margin:0 auto}
+    .device-layout{
+      display:flex;
+      align-items:center;
+      justify-content:center;
+      gap:24px;
+      flex-wrap:wrap;
+    }
+    .device-chart{
+      position:relative;
+      width:100%;
+      max-width:280px;
+      margin:0 auto;
+    }
+    .device-chart canvas{width:100%!important;height:auto!important}
+    .device-center{
+      position:absolute;
+      top:50%;
+      left:50%;
+      transform:translate(-50%,-50%);
+      text-align:center;
+      pointer-events:none;
+    }
+    .device-center-value{
+      font-size:2rem;
+      font-weight:700;
+      color:var(--text);
+      line-height:1.1;
+    }
+    .device-center-meta{
+      font-size:.9rem;
+      color:var(--muted);
+      line-height:1.2;
+      margin-top:4px;
+    }
+    .device-legend{
+      list-style:none;
+      padding:0;
+      margin:0;
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+      min-width:160px;
+    }
+    .device-legend li{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      font-size:.9rem;
+      color:var(--text);
+    }
+    .device-legend .label{
+      display:flex;
+      align-items:center;
+      gap:8px;
+    }
+    .device-dot{
+      width:10px;
+      height:10px;
+      border-radius:50%;
+      flex-shrink:0;
+    }
+    .device-legend .stat{
+      display:flex;
+      align-items:center;
+      gap:6px;
+      font-weight:600;
+    }
+    .device-legend .percent{
+      font-weight:500;
+      color:var(--muted);
+      font-size:.85rem;
+    }
     .loading,.empty,.error{
       position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
       color:var(--muted);font-size:.95rem;text-align:center;padding:16px
@@ -132,7 +206,13 @@
     overflow-x: hidden; /* evita scroll horizontal */
   }
 }
-
+@media(max-width:640px){
+  .device-layout{justify-content:flex-start}
+}
+    .device-legend .placeholder{
+      color:var(--muted);
+      font-size:.85rem;
+    }
 
   </style>
 </head>
@@ -170,33 +250,50 @@
           <div class="title">Sales Trend</div>
           <div class="subtitle" id="subtitle">Sales evolution over the last 30 days</div>
         </div>
-        <div class="controls">
+        <div class="controls" id="salesControls">
           <button class="pill" data-days="7">7d</button>
           <button class="pill active" data-days="30">30d</button>
           <button class="pill" data-days="90">90d</button>
-          <button id="refreshBtn">↻ Atualizar</button>
+          <button id="refreshBtn">↻ Refresh</button>
         </div>
       </div>
 
       <div class="chart-wrap">
         <canvas id="salesChart"></canvas>
-        <div class="loading" id="loading">Carregando dados...</div>
-        <div class="empty hidden" id="empty">Sem dados para o período selecionado.</div>
-        <div class="error hidden" id="error">Erro ao carregar dados do gráfico.</div>
+        <div class="loading" id="loading">Loading data...</div>
+        <div class="empty hidden" id="empty">No data for selected period.</div>
+        <div class="error hidden" id="error">Error loading chart data.</div>
       </div>
     </section>
 
     <!-- NOVOS GRÁFICOS (movidos para baixo do Sales Trend) -->
     <section class="bottom">
       <div class="panel">
-        <h3>Product Ranking – Mais Vendidos</h3>
-        <p class="muted">Top produtos por quantidade vendida</p>
+        <h3>Product Ranking – Top Sellers</h3>
+        <p class="muted">Top products by quantity sold</p>
         <canvas id="productRankingChart"></canvas>
       </div>
       <div class="panel">
         <h3>Sessions by Device Type</h3>
-        <p class="muted">Distribuição de sessões por dispositivo</p>
-        <canvas id="deviceTypeChart"></canvas>
+        <p class="muted">Sessions distribution by device</p>
+        <div class="controls" id="deviceTypeControls">
+          <button class="pill" data-days="1">1d</button>
+          <button class="pill" data-days="7">7d</button>
+          <button class="pill active" data-days="30">30d</button>
+          <button class="pill" data-days="90">90d</button>
+        </div>
+        <div class="device-layout">
+          <div class="device-chart">
+            <canvas id="deviceTypeChart"></canvas>
+            <div class="device-center">
+              <div class="device-center-value" id="deviceCenterValue">0</div>
+              <div class="device-center-meta" id="deviceCenterMeta">Sem dados</div>
+            </div>
+          </div>
+          <ul class="device-legend" id="deviceLegend">
+            <li class="placeholder">Carregando...</li>
+          </ul>
+        </div>
       </div>
     </section>
 
@@ -210,7 +307,8 @@
     const emptyEl   = document.getElementById('empty');
     const errorEl   = document.getElementById('error');
     const subtitleEl= document.getElementById('subtitle');
-    const pills = Array.from(document.querySelectorAll('.pill'));
+    // Escopa os botões de período SOMENTE ao bloco de Sales Trend
+    const pills = Array.from(document.querySelectorAll('#salesControls .pill'));
     const refreshBtn = document.getElementById('refreshBtn');
 
     const API_BASE = 'https://boketto-api-proxy.contatolucasmartins.workers.dev';
@@ -265,7 +363,7 @@
         data: {
           labels,
           datasets: [{
-            label: 'Total de Vendas',
+            label: 'Total Sales',
             data: values,
             borderColor: '#8B5CF6',
             borderWidth: 2,
@@ -291,7 +389,7 @@
               borderColor:'#e5e7eb', borderWidth:1, padding:10, displayColors:false,
               callbacks: {
                 label: (ctx)=> ' '+Number(ctx.parsed.y).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}),
-                title: (items)=> 'Data: '+items[0].label
+                title: (items)=> 'Date: '+items[0].label
               }
             }
           },
@@ -348,6 +446,10 @@
     const PRODUCTS_API = 'https://airtablebokettostore.contatolucasmartins.workers.dev/airtable/order-line-items';
     const DEVICE_API   = 'https://airtablebokettostore.contatolucasmartins.workers.dev/analytics/device-type';
     let productChart, deviceChart;
+    let deviceDays = 30;
+    const deviceCenterValueEl = document.getElementById('deviceCenterValue');
+    const deviceCenterMetaEl  = document.getElementById('deviceCenterMeta');
+    const deviceLegendEl      = document.getElementById('deviceLegend');
 
     async function fetchAllLineItems(){
       let all = [], offset = null;
@@ -365,7 +467,7 @@
       const map = {};
       items.forEach(r => {
         const f = r.fields || {};
-        const name = f['Name'] || f['Product'] || f['Title'] || f['name'] || 'Sem nome';
+        const name = f['Name'] || f['Product'] || f['Title'] || f['name'] || 'Unnamed';
         const qtyRaw = f['Quantity'] ?? f['quantity'] ?? 1;
         const qty = Number(qtyRaw);
         map[name] = (map[name] || 0) + (Number.isFinite(qty) ? qty : 1);
@@ -398,60 +500,176 @@
         const { labels, values } = aggregateProductRanking(items);
         renderProductRanking(labels, values);
       }catch(e){
-        console.warn('Falha ao carregar Product Ranking:', e);
-        renderProductRanking(['Sem dados'], [0]);
+        console.warn('Failed to load Product Ranking:', e);
+        renderProductRanking(['No data'], [0]);
       }
     }
 
-    async function fetchDeviceData(){
+    async function fetchDeviceData(days){
       try{
-        const res = await fetch(DEVICE_API, { cache: 'no-store' });
-        const j = await res.json();
-        let labels=[], values=[];
-        if(Array.isArray(j)){
-          labels = j.map(it => it.device || it.type || it.deviceType || it.name || it.label || 'Unknown');
-          values = j.map(it => Number(it.sessions ?? it.count ?? it.value ?? 0));
-        } else if(Array.isArray(j.data)){
-          labels = j.data.map(it => it.device || it.type || it.deviceType || it.name || it.label || 'Unknown');
-          values = j.data.map(it => Number(it.sessions ?? it.count ?? it.value ?? 0));
-        } else if (j && typeof j === 'object'){
-          labels = Object.keys(j);
-          values = Object.values(j).map(v => Number(v.sessions ?? v.count ?? v.value ?? v));
-        }
-        return { labels, values };
+        const url = new URL(DEVICE_API);
+        if(Number.isFinite(days)) url.searchParams.set('days', days);
+        url.searchParams.set('_', Date.now());
+        const res = await fetch(url.toString(), { cache: 'no-store' });
+        if(!res.ok) throw new Error('HTTP '+res.status);
+        const payload = await res.json();
+        return normalizeDevicePayload(payload);
       }catch(e){
-        console.warn('Falha ao buscar device-type:', e);
+        console.warn('Failed to fetch device-type:', e);
         return { labels:[], values:[] };
       }
+    }
+
+    function normalizeDevicePayload(payload){
+      const labels = [];
+      const values = [];
+      const pushEntry = (label, value)=>{
+        const safeLabel = label || 'Unknown';
+        const num = Number(value);
+        labels.push(safeLabel);
+        values.push(Number.isFinite(num) ? num : 0);
+      };
+      if(Array.isArray(payload)){
+        payload.forEach(item=>{
+          if(!item) return;
+          const label = item.device || item.type || item.deviceType || item.name || item.label;
+          const value = item.sessions ?? item.count ?? item.value ?? item.total ?? item.quantity;
+          pushEntry(label, value);
+        });
+      }else if(payload && Array.isArray(payload.data)){
+        payload.data.forEach(item=>{
+          if(!item) return;
+          const label = item.device || item.type || item.deviceType || item.name || item.label;
+          const value = item.sessions ?? item.count ?? item.value ?? item.total ?? item.quantity;
+          pushEntry(label, value);
+        });
+      }else if(payload && typeof payload === 'object'){
+        Object.entries(payload).forEach(([key, val])=>{
+          if(key === 'meta' || key === 'total' || key === 'summary') return;
+          if(Array.isArray(val)){
+            val.forEach(inner=>{
+              if(!inner) return;
+              const label = inner.device || inner.type || inner.deviceType || inner.name || inner.label;
+              const value = inner.sessions ?? inner.count ?? inner.value ?? inner.total ?? inner.quantity;
+              pushEntry(label || key, value);
+            });
+            return;
+          }
+          if(val && typeof val === 'object'){
+            const label = val.device || val.type || val.deviceType || val.name || val.label || key;
+            const value = val.sessions ?? val.count ?? val.value ?? val.total ?? val.quantity ?? val;
+            pushEntry(label, value);
+          }else{
+            pushEntry(key, val);
+          }
+        });
+      }
+      return { labels, values };
     }
 
     function renderDeviceChart(labels, values){
       const ctx3 = document.getElementById('deviceTypeChart').getContext('2d');
       if(deviceChart) deviceChart.destroy();
-      const colors = ['#8B5CF6','#22C55E','#E5E7EB','#F59E0B','#60A5FA','#F472B6'];
+      const safeLabels = Array.isArray(labels) ? labels : [];
+      const safeValues = Array.isArray(values)
+        ? values.map(v=>{
+            const num = Number(v);
+            return Number.isFinite(num) ? num : 0;
+          })
+        : [];
+      const hasData = safeLabels.length && safeValues.some(v=>v>0);
+      const palette = ['#8B5CF6','#22C55E','#E5E7EB','#F59E0B','#60A5FA','#F472B6','#14B8A6','#F97316','#3B82F6'];
+      const datasetColors = hasData
+        ? safeLabels.map((_, idx)=>palette[idx % palette.length])
+        : ['#E5E7EB'];
+      const chartLabels = hasData ? safeLabels : ['Sem dados'];
+      const chartValues = hasData ? safeValues : [1];
       deviceChart = new Chart(ctx3, {
         type:'doughnut',
-        data:{ labels, datasets:[{ data: values, backgroundColor: colors.slice(0, Math.max(values.length,3)) }] },
+        data:{
+          labels: chartLabels,
+          datasets:[{
+            data: chartValues,
+            backgroundColor: datasetColors,
+            borderWidth:0
+          }]
+        },
         options:{
-          responsive:true, maintainAspectRatio:false, animation:false,
-          plugins:{
-            legend:{ display:true, position:'bottom', labels:{ color:'#374151', boxWidth:12, boxHeight:12, padding:10, font:{ size:12 } } }
-          },
-          cutout:'60%'
+          responsive:true,
+          maintainAspectRatio:true,
+          aspectRatio:1,
+          animation:false,
+          plugins:{ legend:{ display:false } },
+          cutout:'68%'
         }
       });
+      const total = hasData ? safeValues.reduce((sum,v)=>sum+v,0) : 0;
+      updateDeviceCenter(hasData ? safeLabels : [], hasData ? safeValues : [], total);
+      updateDeviceLegend(hasData ? safeLabels : [], hasData ? safeValues : [], palette, total);
       setTimeout(sendHeight, 50);
     }
 
-    async function loadDeviceType(){
-      const { labels, values } = await fetchDeviceData();
-      if(!labels.length) renderDeviceChart(['Sem dados'], [0]);
-      else renderDeviceChart(labels, values);
+    function updateDeviceCenter(labels, values, total){
+      if(!deviceCenterValueEl || !deviceCenterMetaEl){
+        return;
+      }
+      if(!labels.length || !values.length || total <= 0){
+        deviceCenterValueEl.textContent = '0';
+        deviceCenterMetaEl.textContent = 'Sem dados';
+        return;
+      }
+      let topIndex = 0;
+      values.forEach((value, idx)=>{
+        if((Number(value)||0) > (Number(values[topIndex])||0)) topIndex = idx;
+      });
+      const topValue = Number(values[topIndex]) || 0;
+      const share = total > 0 ? (topValue / total) * 100 : 0;
+      const pctLabel = share.toLocaleString('pt-BR', { maximumFractionDigits:0 });
+      deviceCenterValueEl.textContent = topValue.toLocaleString('pt-BR');
+      deviceCenterMetaEl.textContent = `${labels[topIndex] || '—'} • ${pctLabel}%`;
+    }
+
+    function updateDeviceLegend(labels, values, palette, total){
+      if(!deviceLegendEl){
+        return;
+      }
+      if(!labels.length || !values.length || total <= 0){
+        deviceLegendEl.innerHTML = '<li class="placeholder">Sem dados disponíveis</li>';
+        return;
+      }
+      const items = labels.map((label, idx)=>{
+        const value = Number(values[idx]) || 0;
+        const share = total > 0 ? (value / total) * 100 : 0;
+        const pctLabel = share.toLocaleString('pt-BR', { maximumFractionDigits:0 });
+        const dotColor = palette[idx % palette.length];
+        return `<li><span class="label"><span class="device-dot" style="background:${dotColor}"></span>${label}</span><span class="stat">${value.toLocaleString('pt-BR')}<span class="percent">${pctLabel}%</span></span></li>`;
+      }).join('');
+      deviceLegendEl.innerHTML = items;
+    }
+
+    async function loadDeviceType(days){
+      const targetDays = Number.isFinite(days) ? days : deviceDays;
+      deviceDays = targetDays;
+      if(deviceLegendEl){
+        deviceLegendEl.innerHTML = '<li class="placeholder">Carregando...</li>';
+      }
+      const { labels, values } = await fetchDeviceData(targetDays);
+      renderDeviceChart(labels, values);
     }
 
     function initAdditionalCharts(){
       loadProductRanking();
-      loadDeviceType();
+      // setup device type controls
+      const deviceBtns = Array.from(document.querySelectorAll('#deviceTypeControls .pill'));
+      if(deviceBtns.length){
+        deviceBtns.forEach(btn => btn.addEventListener('click', ()=>{
+          deviceBtns.forEach(b=>b.classList.remove('active'));
+          btn.classList.add('active');
+          const d = Number(btn.dataset.days);
+          loadDeviceType(d);
+        }));
+      }
+      loadDeviceType(deviceDays);
     }
 
     // inicia com 30d
