@@ -71,82 +71,51 @@
     #refreshBtn{border:none;border-radius:8px;padding:6px 12px;font-size:.85rem;background:#f3f4f6;color:#111827}
     #refreshBtn:hover{background:#e5e7eb}
     #salesChart{width:100%!important;height:360px!important}
-    /* Altura fixa apenas para o ranking (barras). Doughnut será quadrado via aspect ratio. */
+
+    /* Altura fixa apenas para o ranking (barras). */
     #productRankingChart{width:100%!important;height:360px!important;display:block}
-    #deviceTypeChart{display:block;width:100%;max-width:260px;margin:0 auto}
-    .device-layout{
-      display:flex;
-      align-items:center;
-      justify-content:center;
-      gap:24px;
-      flex-wrap:wrap;
+
+    /* Gráfico de pizza com proporções melhoradas */
+    .collection-container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 320px;
+      padding: 0 20px;
     }
-    .device-chart{
-      position:relative;
-      width:100%;
-      max-width:280px;
-      margin:0 auto;
+    .chart-container {
+      width: 45%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
     }
-    .device-chart canvas{width:100%!important;height:auto!important}
-    .device-center{
-      position:absolute;
-      top:50%;
-      left:50%;
-      transform:translate(-50%,-50%);
-      text-align:center;
-      pointer-events:none;
+    .legend-container {
+      width: 45%;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      align-content: center;
+      column-gap: 10px;
     }
-    .device-center-value{
-      font-size:2rem;
-      font-weight:700;
-      color:var(--text);
-      line-height:1.1;
+    .legend-item {
+      display: flex;
+      align-items: center;
+      margin: 5px;
+      width: 45%;
     }
-    .device-center-meta{
-      font-size:.9rem;
-      color:var(--muted);
-      line-height:1.2;
-      margin-top:4px;
+    .legend-color {
+      width: 15px;
+      height: 15px;
+      border-radius: 50%;
+      margin-right: 5px;
     }
-    .device-legend{
-      list-style:none;
-      padding:0;
-      margin:0;
-      display:flex;
-      flex-direction:column;
-      gap:12px;
-      min-width:160px;
+    #collectionChart {
+      width: 280px;
+      height: 280px;
+      margin: 0 auto;
     }
-    .device-legend li{
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:12px;
-      font-size:.9rem;
-      color:var(--text);
-    }
-    .device-legend .label{
-      display:flex;
-      align-items:center;
-      gap:8px;
-    }
-    .device-dot{
-      width:10px;
-      height:10px;
-      border-radius:50%;
-      flex-shrink:0;
-    }
-    .device-legend .stat{
-      display:flex;
-      align-items:center;
-      gap:6px;
-      font-weight:600;
-    }
-    .device-legend .percent{
-      font-weight:500;
-      color:var(--muted);
-      font-size:.85rem;
-    }
+
     .loading,.empty,.error{
       position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
       color:var(--muted);font-size:.95rem;text-align:center;padding:16px
@@ -177,43 +146,11 @@
     .panel h3{margin:0 0 10px;font-size:1.02rem}
     .panel p.muted{margin:0 0 14px;color:var(--muted);font-size:.9rem}
 
-    /* barras de afinidade (estáticas) */
-    .bar{
-      background:#f3f4f6;border-radius:10px;height:10px;overflow:hidden;margin:10px 0 18px;position:relative;
+    /* --- MOBILE SCROLL --- */
+    @media (max-width: 768px) {
+      html, body { height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+      .container { min-height: 100vh; overflow-x: hidden; }
     }
-    .bar > span{
-      display:block;height:100%;background:rgba(139,92,246,.5);
-    }
-    .row{display:flex;justify-content:space-between;align-items:center;font-size:.9rem;color:var(--muted);}
-
-    /* cartões de insights */
-    .insight{border-radius:10px;padding:12px 14px;margin-bottom:10px;border:1px solid var(--border);background:#f8fafc;}
-    .insight .tag{font-size:.8rem;font-weight:600;margin-bottom:6px;display:flex;gap:8px;align-items:center}
-    .insight .txt{font-size:.9rem;color:#374151}
-
-    /* --- ADICIONE ISSO AO FINAL DO BLOCO <style> --- */
-
-/* Habilita rolagem vertical apenas no mobile */
-@media (max-width: 768px) {
-  html, body {
-    height: 100%;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch; /* rolagem suave no iOS */
-  }
-
-  .container {
-    min-height: 100vh;
-    overflow-x: hidden; /* evita scroll horizontal */
-  }
-}
-@media(max-width:640px){
-  .device-layout{justify-content:flex-start}
-}
-    .device-legend .placeholder{
-      color:var(--muted);
-      font-size:.85rem;
-    }
-
   </style>
 </head>
 <body>
@@ -266,7 +203,7 @@
       </div>
     </section>
 
-    <!-- NOVOS GRÁFICOS (movidos para baixo do Sales Trend) -->
+    <!-- NOVOS GRÁFICOS (apenas estes dois foram alterados) -->
     <section class="bottom">
       <div class="panel">
         <h3>Product Ranking – Top Sellers</h3>
@@ -274,40 +211,26 @@
         <canvas id="productRankingChart"></canvas>
       </div>
       <div class="panel">
-        <h3>Sessions by Device Type</h3>
-        <p class="muted">Sessions distribution by device</p>
-        <div class="controls" id="deviceTypeControls">
-          <button class="pill" data-days="1">1d</button>
-          <button class="pill" data-days="7">7d</button>
-          <button class="pill active" data-days="30">30d</button>
-          <button class="pill" data-days="90">90d</button>
-        </div>
-        <div class="device-layout">
-          <div class="device-chart">
-            <canvas id="deviceTypeChart"></canvas>
-            <div class="device-center">
-              <div class="device-center-value" id="deviceCenterValue">0</div>
-              <div class="device-center-meta" id="deviceCenterMeta">Sem dados</div>
-            </div>
+        <h3>Products by Collection</h3>
+        <p class="muted">Distribution of products by collection</p>
+        <div class="collection-container">
+          <div class="chart-container">
+            <canvas id="collectionChart"></canvas>
           </div>
-          <ul class="device-legend" id="deviceLegend">
-            <li class="placeholder">Carregando...</li>
-          </ul>
+          <div id="collectionLegend" class="legend-container"></div>
         </div>
       </div>
     </section>
-
-    <!-- Painéis removidos: Product Affinity e Cross-Selling Insights -->
   </div>
 
-  <!-- JS DO SALES TREND (API REAL + CONTROLES) -->
+  <!-- JS (KPI + Sales Trend intactos; só trocamos os 2 gráficos de baixo) -->
   <script>
+    /* ---------- SALES TREND (sem alterações) ---------- */
     const ctx = document.getElementById('salesChart').getContext('2d');
     const loadingEl = document.getElementById('loading');
     const emptyEl   = document.getElementById('empty');
     const errorEl   = document.getElementById('error');
     const subtitleEl= document.getElementById('subtitle');
-    // Escopa os botões de período SOMENTE ao bloco de Sales Trend
     const pills = Array.from(document.querySelectorAll('#salesControls .pill'));
     const refreshBtn = document.getElementById('refreshBtn');
 
@@ -403,7 +326,6 @@
         }
       });
 
-      // avisa o iframe para ajustar a altura quando o gráfico renderizar
       setTimeout(sendHeight, 50);
     }
 
@@ -423,7 +345,7 @@
     pills.forEach(p=>p.addEventListener('click', ()=>load(Number(p.dataset.days))));
     refreshBtn.addEventListener('click', ()=>load(currentDays));
 
-    // AUTO HEIGHT para o embed no Noloco
+    /* ---------- AUTO HEIGHT (sem alterações) ---------- */
     let __lastHeight = 0;
     let __heightTimer = null;
     function sendHeight(){
@@ -442,46 +364,51 @@
     const mo = new MutationObserver(()=>sendHeight());
     mo.observe(document.body, { childList:true, subtree:true });
 
-    // ---- Gráficos adicionais (Product Ranking, Device Type) ----
-    const PRODUCTS_API = 'https://airtablebokettostore.contatolucasmartins.workers.dev/airtable/order-line-items';
-    const DEVICE_API   = 'https://airtablebokettostore.contatolucasmartins.workers.dev/analytics/device-type';
-    let productChart, deviceChart;
-    let deviceDays = 30;
-    const deviceCenterValueEl = document.getElementById('deviceCenterValue');
-    const deviceCenterMetaEl  = document.getElementById('deviceCenterMeta');
-    const deviceLegendEl      = document.getElementById('deviceLegend');
+    /* =====================================================
+       NOVOS GRÁFICOS (Somente esta seção foi alterada)
+       Esquerda: Top Sellers (barra)
+       Direita:  Produtos por Coleção (pizza)
+       ===================================================== */
 
-    async function fetchAllLineItems(){
+    // ENDPOINTS SOLICITADOS
+    const TOP_SELLERS_API   = 'https://airtablebokettostore.contatolucasmartins.workers.dev/airtable/tblQNdIDlFW4UBmzW';
+    const COLLECTIONS_API   = 'https://airtablebokettostore.contatolucasmartins.workers.dev/airtable/tbl71ryDS2C7EtPJL';
+
+    let productChart, collectionChart;
+
+    /* ---------- TOP SELLERS (BARRAS) ---------- */
+    async function fetchAllFromAirtable(url){
       let all = [], offset = null;
-      do {
-        const url = `${PRODUCTS_API}${offset ? '?offset='+offset : ''}`;
-        const res = await fetch(url, { cache: 'no-store' });
+      do{
+        const full = offset ? `${url}?offset=${encodeURIComponent(offset)}` : url;
+        const res = await fetch(full, { cache:'no-store' });
         const json = await res.json();
-        if(json.records) all = all.concat(json.records);
+        if(json && Array.isArray(json.records)) all = all.concat(json.records);
         offset = json.offset;
-      } while(offset);
+      }while(offset);
       return all;
     }
 
-    function aggregateProductRanking(items){
+    function aggregateTopSellers(records){
       const map = {};
-      items.forEach(r => {
+      records.forEach(r=>{
         const f = r.fields || {};
-        const name = f['Name'] || f['Product'] || f['Title'] || f['name'] || 'Unnamed';
-        const qtyRaw = f['Quantity'] ?? f['quantity'] ?? 1;
-        const qty = Number(qtyRaw);
-        map[name] = (map[name] || 0) + (Number.isFinite(qty) ? qty : 1);
+        const name = f['Product'] || f['Name'] || f['Title'] || 'Unnamed';
+        const qty  = Number(
+          f['Quantity'] ?? f['Qty'] ?? f['quantity'] ?? 1
+        );
+        map[name] = (map[name]||0) + (Number.isFinite(qty) ? qty : 1);
       });
-      const entries = Object.entries(map).sort((a,b)=>b[1]-a[1]).slice(0,10);
-      return { labels: entries.map(e=>e[0]), values: entries.map(e=>e[1]) };
+      const sorted = Object.entries(map).sort((a,b)=>b[1]-a[1]).slice(0,10);
+      return { labels: sorted.map(([n])=>n), values: sorted.map(([,v])=>v) };
     }
 
-    function renderProductRanking(labels, values){
+    function renderTopSellers(labels, values){
       const ctx2 = document.getElementById('productRankingChart').getContext('2d');
       if(productChart) productChart.destroy();
       productChart = new Chart(ctx2, {
         type:'bar',
-        data:{ labels, datasets:[{ data: values, backgroundColor:'#8B5CF6', borderWidth:0, maxBarThickness:36 }] },
+        data:{ labels, datasets:[{ data:values, backgroundColor:'#8B5CF6', borderWidth:0, maxBarThickness:36 }] },
         options:{
           responsive:true, maintainAspectRatio:false, animation:false,
           plugins:{ legend:{ display:false } },
@@ -491,191 +418,130 @@
           }
         }
       });
-      setTimeout(sendHeight, 50);
+      setTimeout(sendHeight,50);
     }
 
-    async function loadProductRanking(){
+    async function loadTopSellers(){
       try{
-        const items = await fetchAllLineItems();
-        const { labels, values } = aggregateProductRanking(items);
-        renderProductRanking(labels, values);
+        const recs = await fetchAllFromAirtable(TOP_SELLERS_API);
+        const { labels, values } = aggregateTopSellers(recs);
+        if(labels.length){ renderTopSellers(labels, values); }
+        else{ renderTopSellers(['No data'], [0]); }
       }catch(e){
-        console.warn('Failed to load Product Ranking:', e);
-        renderProductRanking(['No data'], [0]);
+        console.warn('Top Sellers error:', e);
+        renderTopSellers(['No data'], [0]);
       }
     }
 
-    async function fetchDeviceData(days){
-      try{
-        const url = new URL(DEVICE_API);
-        if(Number.isFinite(days)) url.searchParams.set('days', days);
-        url.searchParams.set('_', Date.now());
-        const res = await fetch(url.toString(), { cache: 'no-store' });
-        if(!res.ok) throw new Error('HTTP '+res.status);
-        const payload = await res.json();
-        return normalizeDevicePayload(payload);
-      }catch(e){
-        console.warn('Failed to fetch device-type:', e);
-        return { labels:[], values:[] };
-      }
+    /* ---------- PRODUTOS POR COLEÇÃO (PIZZA) ---------- */
+    function aggregateCollections(records){
+      const map = {};
+      records.forEach(r=>{
+        const f = r.fields || {};
+        // Usar o campo Title da tabela de coleções
+        const title = f["Title"] || "Sem título";
+        // Usar o campo Products para contar quantos produtos tem em cada coleção
+        const prods = f["Products"];
+        const count = Array.isArray(prods) ? prods.length : (prods ? 1 : 0);
+        map[title] = count;
+      });
+      return { labels:Object.keys(map), values:Object.values(map) };
     }
 
-    function normalizeDevicePayload(payload){
-      const labels = [];
-      const values = [];
-      const pushEntry = (label, value)=>{
-        const safeLabel = label || 'Unknown';
-        const num = Number(value);
-        labels.push(safeLabel);
-        values.push(Number.isFinite(num) ? num : 0);
-      };
-      if(Array.isArray(payload)){
-        payload.forEach(item=>{
-          if(!item) return;
-          const label = item.device || item.type || item.deviceType || item.name || item.label;
-          const value = item.sessions ?? item.count ?? item.value ?? item.total ?? item.quantity;
-          pushEntry(label, value);
-        });
-      }else if(payload && Array.isArray(payload.data)){
-        payload.data.forEach(item=>{
-          if(!item) return;
-          const label = item.device || item.type || item.deviceType || item.name || item.label;
-          const value = item.sessions ?? item.count ?? item.value ?? item.total ?? item.quantity;
-          pushEntry(label, value);
-        });
-      }else if(payload && typeof payload === 'object'){
-        Object.entries(payload).forEach(([key, val])=>{
-          if(key === 'meta' || key === 'total' || key === 'summary') return;
-          if(Array.isArray(val)){
-            val.forEach(inner=>{
-              if(!inner) return;
-              const label = inner.device || inner.type || inner.deviceType || inner.name || inner.label;
-              const value = inner.sessions ?? inner.count ?? inner.value ?? inner.total ?? inner.quantity;
-              pushEntry(label || key, value);
-            });
-            return;
-          }
-          if(val && typeof val === 'object'){
-            const label = val.device || val.type || val.deviceType || val.name || val.label || key;
-            const value = val.sessions ?? val.count ?? val.value ?? val.total ?? val.quantity ?? val;
-            pushEntry(label, value);
-          }else{
-            pushEntry(key, val);
-          }
-        });
-      }
-      return { labels, values };
-    }
-
-    function renderDeviceChart(labels, values){
-      const ctx3 = document.getElementById('deviceTypeChart').getContext('2d');
-      if(deviceChart) deviceChart.destroy();
-      const safeLabels = Array.isArray(labels) ? labels : [];
-      const safeValues = Array.isArray(values)
-        ? values.map(v=>{
-            const num = Number(v);
-            return Number.isFinite(num) ? num : 0;
-          })
-        : [];
-      const hasData = safeLabels.length && safeValues.some(v=>v>0);
-      const palette = ['#8B5CF6','#22C55E','#E5E7EB','#F59E0B','#60A5FA','#F472B6','#14B8A6','#F97316','#3B82F6'];
-      const datasetColors = hasData
-        ? safeLabels.map((_, idx)=>palette[idx % palette.length])
-        : ['#E5E7EB'];
-      const chartLabels = hasData ? safeLabels : ['Sem dados'];
-      const chartValues = hasData ? safeValues : [1];
-      deviceChart = new Chart(ctx3, {
-        type:'doughnut',
-        data:{
-          labels: chartLabels,
-          datasets:[{
-            data: chartValues,
-            backgroundColor: datasetColors,
-            borderWidth:0
-          }]
+    function renderCollections(labels, values){
+      const ctx3 = document.getElementById('collectionChart').getContext('2d');
+      if(collectionChart) collectionChart.destroy();
+      const palette = ['#8B5CF6','#22C55E','#F59E0B','#60A5FA','#F472B6','#14B8A6','#F97316','#3B82F6','#EF4444','#10B981'];
+      const colors = labels.map((_,i)=>palette[i%palette.length]);
+      
+      // Limpar e preparar a legenda personalizada
+      const legendContainer = document.getElementById('collectionLegend');
+      legendContainer.innerHTML = '';
+      
+      collectionChart = new Chart(ctx3, {
+        type:'pie',
+        data:{ 
+          labels, 
+          datasets:[{ 
+            data:values, 
+            backgroundColor:colors, 
+            borderWidth:2,
+            borderColor:'#ffffff',
+            hoverBorderWidth:4,
+            hoverOffset:10
+          }] 
         },
         options:{
           responsive:true,
           maintainAspectRatio:true,
           aspectRatio:1,
-          animation:false,
-          plugins:{ legend:{ display:false } },
-          cutout:'68%'
+          animation:{
+            animateRotate: true,
+            animateScale: true,
+            duration: 1200,
+            easing: 'easeOutCirc'
+          },
+          plugins:{ 
+            legend:{ 
+              display: false // Desativar legenda padrão do Chart.js
+            },
+            tooltip:{
+              callbacks:{
+                label:(ctx)=>`${ctx.label}: ${ctx.formattedValue} produtos`
+              },
+              backgroundColor:'#ffffff',
+              titleColor:'#111827',
+              bodyColor:'#111827',
+              borderColor:'#e5e7eb',
+              borderWidth:1,
+              padding:10,
+              displayColors:true,
+              boxPadding:4
+            }
+          }
         }
       });
-      const total = hasData ? safeValues.reduce((sum,v)=>sum+v,0) : 0;
-      updateDeviceCenter(hasData ? safeLabels : [], hasData ? safeValues : [], total);
-      updateDeviceLegend(hasData ? safeLabels : [], hasData ? safeValues : [], palette, total);
-      setTimeout(sendHeight, 50);
-    }
-
-    function updateDeviceCenter(labels, values, total){
-      if(!deviceCenterValueEl || !deviceCenterMetaEl){
-        return;
-      }
-      if(!labels.length || !values.length || total <= 0){
-        deviceCenterValueEl.textContent = '0';
-        deviceCenterMetaEl.textContent = 'Sem dados';
-        return;
-      }
-      let topIndex = 0;
-      values.forEach((value, idx)=>{
-        if((Number(value)||0) > (Number(values[topIndex])||0)) topIndex = idx;
+      
+      // Criar legenda personalizada em 2 colunas
+      colors.forEach((color, i) => {
+        if (i < labels.length) {
+          const item = document.createElement('div');
+          item.className = 'legend-item';
+          
+          const colorBox = document.createElement('span');
+          colorBox.className = 'legend-color';
+          colorBox.style.backgroundColor = color;
+          
+          const text = document.createElement('span');
+          text.textContent = `${labels[i]} (${values[i]})`;
+          
+          item.appendChild(colorBox);
+          item.appendChild(text);
+          legendContainer.appendChild(item);
+        }
       });
-      const topValue = Number(values[topIndex]) || 0;
-      const share = total > 0 ? (topValue / total) * 100 : 0;
-      const pctLabel = share.toLocaleString('pt-BR', { maximumFractionDigits:0 });
-      deviceCenterValueEl.textContent = topValue.toLocaleString('pt-BR');
-      deviceCenterMetaEl.textContent = `${labels[topIndex] || '—'} • ${pctLabel}%`;
+      
+      setTimeout(sendHeight,50);
     }
 
-    function updateDeviceLegend(labels, values, palette, total){
-      if(!deviceLegendEl){
-        return;
+    async function loadCollections(){
+      try{
+        const recs = await fetchAllFromAirtable(COLLECTIONS_API);
+        const { labels, values } = aggregateCollections(recs);
+        if(labels.length){ renderCollections(labels, values); }
+        else{ renderCollections(['Sem dados'], [1]); }
+      }catch(e){
+        console.warn('Collections error:', e);
+        renderCollections(['Sem dados'], [1]);
       }
-      if(!labels.length || !values.length || total <= 0){
-        deviceLegendEl.innerHTML = '<li class="placeholder">Sem dados disponíveis</li>';
-        return;
-      }
-      const items = labels.map((label, idx)=>{
-        const value = Number(values[idx]) || 0;
-        const share = total > 0 ? (value / total) * 100 : 0;
-        const pctLabel = share.toLocaleString('pt-BR', { maximumFractionDigits:0 });
-        const dotColor = palette[idx % palette.length];
-        return `<li><span class="label"><span class="device-dot" style="background:${dotColor}"></span>${label}</span><span class="stat">${value.toLocaleString('pt-BR')}<span class="percent">${pctLabel}%</span></span></li>`;
-      }).join('');
-      deviceLegendEl.innerHTML = items;
     }
 
-    async function loadDeviceType(days){
-      const targetDays = Number.isFinite(days) ? days : deviceDays;
-      deviceDays = targetDays;
-      if(deviceLegendEl){
-        deviceLegendEl.innerHTML = '<li class="placeholder">Carregando...</li>';
-      }
-      const { labels, values } = await fetchDeviceData(targetDays);
-      renderDeviceChart(labels, values);
-    }
-
-    function initAdditionalCharts(){
-      loadProductRanking();
-      // setup device type controls
-      const deviceBtns = Array.from(document.querySelectorAll('#deviceTypeControls .pill'));
-      if(deviceBtns.length){
-        deviceBtns.forEach(btn => btn.addEventListener('click', ()=>{
-          deviceBtns.forEach(b=>b.classList.remove('active'));
-          btn.classList.add('active');
-          const d = Number(btn.dataset.days);
-          loadDeviceType(d);
-        }));
-      }
-      loadDeviceType(deviceDays);
-    }
-
-    // inicia com 30d
+    /* ---------- INICIALIZAÇÃO ---------- */
+    // inicia Sales Trend com 30d (como antes)
     load(30);
-    // carrega gráficos novos
-    initAdditionalCharts();
+    // carrega os novos gráficos inferiores
+    loadTopSellers();
+    loadCollections();
   </script>
 </body>
 </html>
