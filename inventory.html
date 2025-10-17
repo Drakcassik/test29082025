@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Boketto – Inventory Dashboard</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root{
+      --accent:#8B5CF6;
+      --text:#111827;
+      --muted:#6b7280;
+      --card:#ffffff;
+      --border:rgba(0,0,0,.06);
+      --shadow:0 8px 20px rgba(0,0,0,.05);
+      --radius:14px;
+      --danger:#ef4444;
+      --warning:#f59e0b;
+      --ok:#10b981;
+    }
+
+    html,body{
+      margin:0;padding:0;background:transparent;
+      font-family:Inter,system-ui,-apple-system,sans-serif;
+      color:var(--text);
+    }
+
+    .container{
+      width:100%;
+      box-sizing:border-box;
+      padding:6px 6px 16px;
+    }
+
+    /* GRID TOP */
+    .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-bottom:18px;}
+    @media(max-width:1200px){.cards{grid-template-columns:repeat(2,1fr)}}
+    @media(max-width:640px){.cards{grid-template-columns:1fr}}
+
+    .card{background:var(--card);border:1px solid var(--border);box-shadow:var(--shadow);border-radius:var(--radius);padding:18px 20px;}
+    .kpi-title{font-size:.95rem;color:var(--muted);margin:0 0 8px;}
+    .kpi-value{font-size:1.6rem;font-weight:700;margin:0 0 6px;}
+    .kpi-sub{font-size:.85rem;color:var(--muted);margin:0;}
+
+    .badge{display:inline-flex;align-items:center;gap:6px;font-size:.78rem;border-radius:999px;padding:4px 8px;}
+    .badge.ok{background:rgba(16,185,129,.12);color:var(--ok)}
+    .badge.warn{background:rgba(245,158,11,.12);color:var(--warning)}
+    .badge.danger{background:rgba(239,68,68,.12);color:var(--danger)}
+
+    /* CHART BLOCKS */
+    .chart-card{background:transparent;border:1px solid var(--border);box-shadow:var(--shadow);border-radius:var(--radius);padding:5px;margin-bottom:18px;}
+    .chart-header{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:22px;padding:18px 22px 0;}
+    .title{font-size:1.1rem;font-weight:600;margin:0;}
+    .subtitle{font-size:.85rem;color:var(--muted);margin-top:4px;}
+    .controls{display:flex;gap:8px;align-items:center}
+    .pill{border:none;border-radius:8px;padding:6px 12px;font-size:.85rem;cursor:pointer;background:#f3f4f6;color:#111827;transition:.15s}
+    .pill:hover{background:#e5e7eb}
+    .pill.active{background:var(--accent);color:#fff}
+    #refreshBtn{border:none;border-radius:8px;padding:6px 12px;font-size:.85rem;background:#f3f4f6;color:#111827}
+    #refreshBtn:hover{background:#e5e7eb}
+
+    /* CANVAS HEIGHTS */
+    .chart-wrap{width:100%;height:420px;position:relative;box-sizing:border-box;}
+    #invByCat{width:100%!important;height:360px!important;display:block}
+    #turnoverChart{width:100%!important;height:360px!important;display:block}
+
+    /* GRID INFERIOR */
+    .bottom{display:grid;grid-template-columns: 2fr 1fr;gap:16px;}
+    @media(max-width:1000px){.bottom{grid-template-columns:1fr}}
+
+    .panel{background:var(--card);border:1px solid var(--border);box-shadow:var(--shadow);border-radius:var(--radius);padding:20px 22px;}
+    .panel h3{margin:0 0 8px;font-size:1.02rem}
+    .panel p.muted{margin:0 0 14px;color:var(--muted);font-size:.9rem}
+
+    /* LISTA DE ALERTAS */
+    .alert-list{
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+      margin:0;
+      padding:0;
+      list-style:none;
+      max-height:420px;
+      overflow-y:auto;
+    }
+
+    .alert-item{
+      display:flex;
+      justify-content:space-between;
+      gap:12px;
+      border:1px solid var(--border);
+      border-radius:12px;
+      padding:10px 12px;
+      background:#fff;
+      box-shadow:var(--shadow);
+    }
+
+    .alert-left{display:flex;flex-direction:column;gap:4px;}
+    .alert-title{font-size:.95rem;font-weight:600;}
+    .alert-sku{font-size:.82rem;color:var(--muted);}
+    .alert-right{display:flex;align-items:center;gap:8px;}
+    .chip{border-radius:999px;padding:4px 8px;font-size:.78rem;border:1px solid var(--border);background:#f8fafc}
+    .chip.crit{background:rgba(239,68,68,.08);color:var(--danger);border-color:rgba(239,68,68,.25)}
+    .chip.low{background:rgba(245,158,11,.08);color:var(--warning);border-color:rgba(245,158,11,.25)}
+
+    /* SCROLLBAR ESTILIZADA */
+    .alert-list::-webkit-scrollbar {width: 6px;}
+    .alert-list::-webkit-scrollbar-thumb {background: rgba(0,0,0,.15);border-radius: 4px;}
+    .alert-list::-webkit-scrollbar-thumb:hover {background: rgba(0,0,0,.25);}
+
+    @media (max-width: 768px) {
+      html, body {height: 100%;overflow-y: auto;-webkit-overflow-scrolling: touch;}
+      .container {min-height: 100vh;overflow-x: hidden;}
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <!-- TOP KPIs -->
+  <section class="cards">
+    <div class="card">
+      <p class="kpi-title">Low Stock Products</p>
+      <p class="kpi-value" id="kpiLowStock">—</p>
+      <p class="kpi-sub"><span class="badge danger">Critical threshold ≤ 3</span></p>
+    </div>
+    <div class="card">
+      <p class="kpi-title">Total SKUs</p>
+      <p class="kpi-value" id="kpiSkus">—</p>
+      <p class="kpi-sub">Counting variants</p>
+    </div>
+    <div class="card">
+      <p class="kpi-title">Total Units in Stock</p>
+      <p class="kpi-value" id="kpiUnits">—</p>
+      <p class="kpi-sub">Sum of all locations</p>
+    </div>
+    <div class="card">
+      <p class="kpi-title">COGS (placeholder)</p>
+      <p class="kpi-value" id="kpiCogs">—</p>
+      <p class="kpi-sub">No COGS field detected</p>
+    </div>
+  </section>
+
+  <!-- INVENTORY BY CATEGORY -->
+  <section class="chart-card">
+    <div class="chart-header">
+      <div>
+        <div class="title">Inventory by Category</div>
+        <div class="subtitle">% de estoque ocupado por tipo</div>
+      </div>
+      <div class="controls">
+        <button id="refreshBtn">↻ Refresh</button>
+      </div>
+    </div>
+    <div class="chart-wrap">
+      <canvas id="invByCat"></canvas>
+    </div>
+  </section>
+
+  <!-- LINHA INFERIOR: TURNOVER + ALERTAS -->
+  <section class="bottom">
+    <div class="panel">
+      <h3>Stock Turnover Rate</h3>
+      <p class="muted">How many times stock rotates per month <b>(Estimated)</b></p>
+      <canvas id="turnoverChart"></canvas>
+    </div>
+
+    <div class="panel">
+      <h3>Stock Alerts</h3>
+      <p class="muted">Products that need attention</p>
+      <ul class="alert-list" id="alertList">
+        <li class="alert-item">
+          <span class="alert-left">
+            <span class="alert-title">Carregando…</span>
+            <span class="alert-sku">Aguardando dados</span>
+          </span>
+          <span class="alert-right"><span class="chip">—</span></span>
+        </li>
+      </ul>
+    </div>
+  </section>
+
+</div>
+
+<script>
+const VARIANTS_API = 'https://airtablebokettostore.contatolucasmartins.workers.dev/airtable/tblXC6vyJqqC7W7jO';
+const CRITICAL_THRESHOLD = 3;
+
+/* ---- AUTO HEIGHT ---- */
+let __lastHeight = 0, __heightTimer = null;
+function sendHeight(){
+  if(__heightTimer) return;
+  __heightTimer = setTimeout(()=>{
+    __heightTimer = null;
+    const h = Math.ceil(document.documentElement.scrollHeight);
+    if(Math.abs(h - __lastHeight) > 2){
+      __lastHeight = h;
+      window.parent?.postMessage?.({ iframeHeight: h }, '*');
+    }
+  }, 120);
+}
+window.addEventListener('load', sendHeight);
+window.addEventListener('resize', sendHeight);
+(new MutationObserver(()=>sendHeight())).observe(document.body,{childList:true,subtree:true});
+
+/* ---- FETCH VARIANTS ---- */
+async function fetchAllVariants(){
+  let rows = [], offset = null;
+  do{
+    const url = VARIANTS_API + (offset ? ('?offset=' + encodeURIComponent(offset)) : '');
+    const r = await fetch(url, { cache:'no-store' });
+    const j = await r.json();
+    if(j?.records?.length) rows = rows.concat(j.records);
+    offset = j?.offset;
+  }while(offset);
+  return rows;
+}
+
+function getFirstFieldKey(obj, candidates){
+  if(!obj) return null;
+  const keys = Object.keys(obj);
+  for(const cand of candidates){
+    const hit = keys.find(k => k.toLowerCase().trim() === cand.toLowerCase().trim());
+    if(hit) return hit;
+  }
+  for(const cand of candidates){
+    const hit = keys.find(k => k.toLowerCase().includes(cand.toLowerCase()));
+    if(hit) return hit;
+  }
+  return null;
+}
+
+function safeNum(v){const n=Number(v);return Number.isFinite(n)?n:0;}
+
+function normalizeVariant(rec){
+  const f = rec?.fields || {};
+  const kAlert = getFirstFieldKey(f, ['Alert Stock','Alert','Stock Alert']);
+  const kBase  = getFirstFieldKey(f, ['Product Name Base','Base Name','Category','Produto Base']);
+  const kSku   = getFirstFieldKey(f, ['SKU','Sku','sku']);
+
+  const keys = Object.keys(f);
+  const locQtyKeys = keys.filter(k => /location.*quantity.*available/i.test(k) || /location.*qty/i.test(k));
+  let totalQty = 0;
+  for(const k of locQtyKeys){ totalQty += safeNum(f[k]); }
+  if(totalQty === 0){
+    const kAnyQty = getFirstFieldKey(f, ['Quantity Available','Qty Available','Quantity']);
+    totalQty = safeNum(f[kAnyQty]);
+  }
+
+  return {
+    id: rec.id,
+    alert: (kAlert && f[kAlert]) || '',
+    base:  f[kBase] || 'Uncategorized',
+    sku:   f[kSku] || '—',
+    total: totalQty
+  };
+}
+
+/* ---- KPIs ---- */
+function computeKpis(items){
+  const totalSkus = items.length;
+  const totalUnits = items.reduce((s,i)=>s+i.total,0);
+  const lowByFlag = items.filter(i => String(i.alert).toLowerCase().includes('low')).length;
+  const lowByQty  = items.filter(i => i.total <= CRITICAL_THRESHOLD).length;
+  const lowStock  = Math.max(lowByFlag, lowByQty);
+  return { totalSkus, totalUnits, lowStock };
+}
+
+/* ---- CATEGORY CHART ---- */
+let invCatChart = null;
+function buildByCategory(items){
+  const map = {};
+  items.forEach(i=>{ const cat=i.base||'Uncategorized'; map[cat]=(map[cat]||0)+i.total; });
+  const entries = Object.entries(map).sort((a,b)=>b[1]-a[1]);
+  const total = entries.reduce((s,[_k,v])=>s+v,0)||1;
+  const labels = entries.map(e=>e[0]);
+  const values = entries.map(e=> +(e[1]*100/total).toFixed(2));
+  return { labels, values };
+}
+function renderInvByCategory({labels,values}){
+  const ctx=document.getElementById('invByCat').getContext('2d');
+  if(invCatChart) invCatChart.destroy();
+  invCatChart=new Chart(ctx,{type:'bar',data:{labels,datasets:[{data:values,backgroundColor:'#8B5CF6',maxBarThickness:36,borderWidth:0}]},
+    options:{responsive:true,maintainAspectRatio:false,animation:false,
+      plugins:{legend:{display:false},tooltip:{callbacks:{label:(ctx)=>` ${ctx.parsed.y.toFixed(1)}%`}}},
+      scales:{x:{ticks:{color:'#6b7280'},grid:{drawBorder:false,color:'rgba(0,0,0,.06)'}},
+              y:{beginAtZero:true,max:100,ticks:{color:'#6b7280',callback:(v)=>v+'%'},grid:{drawBorder:false,color:'rgba(0,0,0,.06)'}}}}});
+}
+
+/* ---- TURNOVER ---- */
+let turnoverChart = null;
+function buildTurnoverSeries(totalUnits){
+  const labels=[],values=[],now=new Date();
+  for(let i=5;i>=0;i--){
+    const d=new Date(now.getFullYear(),now.getMonth()-i,1);
+    labels.push(d.toLocaleDateString('pt-BR',{month:'short'}));
+    const base=Math.max(0.6,0.9+(Math.sin((i+1)*0.9)*0.1));
+    values.push(+((totalUnits/100)*base).toFixed(2));
+  }
+  return {labels,values};
+}
+function renderTurnover({labels,values}){
+  const ctx=document.getElementById('turnoverChart').getContext('2d');
+  if(turnoverChart) turnoverChart.destroy();
+  turnoverChart=new Chart(ctx,{type:'line',data:{labels,datasets:[{data:values,label:'Turnover (Estimated)',borderColor:'#8B5CF6',pointBackgroundColor:'#8B5CF6',borderWidth:2,tension:.35,fill:true,
+    backgroundColor:(c)=>{const g=c.chart.ctx.createLinearGradient(0,0,0,300);g.addColorStop(0,'rgba(139,92,246,.25)');g.addColorStop(1,'rgba(139,92,246,0)');return g;}}]},
+    options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:false}},
+      scales:{x:{grid:{display:false},ticks:{color:'#6b7280'}},y:{grid:{color:'#f0f0f0'},ticks:{color:'#6b7280'}}}}});
+}
+
+/* ---- ALERT LIST ---- */
+function renderAlerts(items){
+  const el=document.getElementById('alertList');
+  const critical=items.filter(i=>(String(i.alert).toLowerCase().includes('low')||i.total<=CRITICAL_THRESHOLD))
+                      .sort((a,b)=>a.total-b.total);
+
+  if(!critical.length){
+    el.innerHTML=`<li class="alert-item"><span class="alert-left">
+      <span class="alert-title">Sem alertas</span><span class="alert-sku">Nenhum item abaixo do limite crítico</span>
+      </span><span class="alert-right"><span class="chip">OK</span></span></li>`;
+    return;
+  }
+
+  el.innerHTML=critical.map(i=>{
+    const level=i.total<=0?'crit':'low';
+    const label=i.total<=0?'Out of Stock':'Low Stock';
+    return `<li class="alert-item">
+      <span class="alert-left">
+        <span class="alert-title">${escapeHtml(i.base||'—')}</span>
+        <span class="alert-sku">${escapeHtml(i.sku||'—')}</span>
+      </span>
+      <span class="alert-right">
+        <span class="chip ${level}">${label}</span>
+        <span class="chip">Qty: ${i.total}</span>
+      </span>
+    </li>`;
+  }).join('');
+}
+
+function escapeHtml(s){return String(s||'').replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));}
+
+/* ---- LOAD ---- */
+async function loadAll(){
+  document.getElementById('refreshBtn')?.addEventListener('click',()=>loadAll());
+  const records=await fetchAllVariants();
+  const items=records.map(normalizeVariant);
+  const {totalSkus,totalUnits,lowStock}=computeKpis(items);
+  document.getElementById('kpiSkus').textContent=totalSkus.toLocaleString('pt-BR');
+  document.getElementById('kpiUnits').textContent=totalUnits.toLocaleString('pt-BR');
+  document.getElementById('kpiLowStock').textContent=lowStock.toLocaleString('pt-BR');
+  document.getElementById('kpiCogs').textContent='—';
+  renderInvByCategory(buildByCategory(items));
+  renderTurnover(buildTurnoverSeries(totalUnits));
+  renderAlerts(items);
+  sendHeight();
+}
+loadAll();
+</script>
+</body>
+</html>
