@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<title>Overview</title>
+<style>
+:root{
+  --blue:#3B82F6;
+  --green:#22C55E;
+  --violet:#8B5CF6;
+  --muted:#6b7280;
+  --text:#111827;
+  --card:#ffffff;
+  --border:rgba(0,0,0,.06);
+  --shadow:0 4px 12px rgba(0,0,0,.04);
+  --radius:14px;
+}
+html,body{margin:0;padding:0;background:transparent;font-family:Inter,system-ui,-apple-system,sans-serif;color:var(--text);}
+.container{width:100%;box-sizing:border-box;padding:10px 12px 20px;}
+.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px;}
+@media(max-width:1200px){.cards{grid-template-columns:repeat(2,1fr);}}
+@media(max-width:640px){.cards{grid-template-columns:1fr;}}
+.card{background:var(--card);border:1px solid var(--border);box-shadow:var(--shadow);border-radius:var(--radius);padding:16px 18px;}
+.kpi-title{font-size:.9rem;color:var(--muted);margin:0 0 8px;}
+.kpi-value{font-size:1.45rem;font-weight:700;margin:0 0 4px;}
+.kpi-sub{font-size:.8rem;color:#10b981;margin:0;}
+.chart-card{background:var(--card);border:1px solid var(--border);box-shadow:var(--shadow);border-radius:var(--radius);padding:16px 18px;margin-bottom:18px;}
+.chart-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;}
+.title{font-size:1rem;font-weight:600;margin:0;}
+.subtitle{font-size:.8rem;color:var(--muted);}
+.chart-wrap{position:relative;width:100%;height:300px;}
+.bottom{display:grid;grid-template-columns:1fr 1fr;gap:14px;}
+@media(max-width:1000px){.bottom{grid-template-columns:1fr;}}
+.panel{background:var(--card);border:1px solid var(--border);box-shadow:var(--shadow);border-radius:var(--radius);padding:16px 18px;}
+.panel h3{margin:0 0 8px;font-size:.98rem}
+.panel p.muted{margin:0 0 10px;color:var(--muted);font-size:.85rem}
+.chart-filters{display:flex;gap:6px;}
+.chart-filters button{
+  border:1px solid var(--border);
+  border-radius:8px;
+  background:white;
+  color:var(--muted);
+  font-size:.75rem;
+  padding:4px 8px;
+  cursor:pointer;
+  transition:all .2s ease;
+}
+.chart-filters button.active{background:var(--blue);color:white;border-color:var(--blue);}
+.chart-spacer-top{margin-top:24px;}
+@media(min-width:768px){.chart-spacer-top{margin-top:32px;}}
+</style>
+</head>
+<body>
+<div class="container">
+  <!-- KPIs -->
+  <section class="cards">
+    <div class="card"><p class="kpi-title">Users</p><p class="kpi-value">--</p><p class="kpi-sub">↑ Total users</p></div>
+    <div class="card"><p class="kpi-title">Sessions</p><p class="kpi-value">--</p><p class="kpi-sub">↑ Total sessions</p></div>
+    <div class="card"><p class="kpi-title">Purchase Revenue</p><p class="kpi-value" id="kpi-revenue">--</p><p class="kpi-sub">↑ Total purchase revenue</p></div>
+    <div class="card"><p class="kpi-title">Active Users (30m)</p><p class="kpi-value" id="kpi-active">--</p><p class="kpi-sub">↑ Active in last 30 min</p></div>
+  </section>
+
+  <!-- Gráfico principal -->
+  <section class="chart-card">
+    <div class="chart-header">
+      <div>
+        <div class="title">Users & Sessions Over Time</div>
+        <div class="subtitle" id="subtitle-main">Últimos 30 dias</div>
+      </div>
+      <div class="chart-filters" id="filters-main">
+        <button data-range="1daysAgo">1D</button>
+        <button data-range="7daysAgo">7D</button>
+        <button data-range="30daysAgo" class="active">30D</button>
+        <button data-range="90daysAgo">90D</button>
+      </div>
+    </div>
+    <div class="chart-wrap"><canvas id="usersSessionsChart"></canvas></div>
+  </section>
+
+  <!-- Gráficos secundários -->
+  <section class="bottom">
+    <div class="panel">
+      <h3>Top Channels</h3>
+      <p class="muted">Sessions per channel</p>
+      <div class="chart-wrap" style="height:280px;"><canvas id="channelsChart"></canvas></div>
+    </div>
+    <div class="panel">
+      <h3>Sessions by Traffic Medium</h3>
+      <p class="muted">Sessions by Traffic Medium</p>
+      <div style="display:flex;justify-content:center;align-items:center;height:280px;">
+        <canvas id="mediumsChart" style="width:220px;height:220px;"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <section class="chart-card chart-spacer-top">
+    <div class="chart-header"><div class="title">Revenue by Source / Medium</div><div class="subtitle">Total revenue distribution</div></div>
+    <div class="chart-wrap"><canvas id="revenueSourceChart"></canvas></div>
+    <div class="chart-note">Waiting to collect sales data for the graph to work</div>
+  </section>
+</div>
+
+<script>
+let usersSessionsChart;
+let channelsChart;
+let mediumsChart;
+const DEFAULT_RANGE = "30daysAgo";
+let currentRange = DEFAULT_RANGE;
+
+async function fetchGA4Data(range=DEFAULT_RANGE){
+  const res = await fetch(`https://ga4-api.lucas-def.workers.dev/report?range=${range}&t=${Date.now()}`, { cache: "no-store" });
+  return await res.json();
+}
+
+async function updateRevenueKpi(range = DEFAULT_RANGE){
+  try{
+    const res = await fetch(`https://ga4-api.lucas-def.workers.dev/report?range=${range}&t=${Date.now()}`, { cache: "no-store" });
+    if(!res.ok) throw new Error(`HTTP ${res.status}`);
+    const rows = await res.json();
+    const total = Array.isArray(rows) ? rows.reduce((acc,r)=>acc + (Number(r.purchaseRevenue ?? r.revenue ?? 0)), 0) : 0;
+    const el = document.getElementById('kpi-revenue');
+    if(el) el.textContent = `$${Number(total).toFixed(2)}`;
+  }catch(err){
+    console.error('Error loading purchase revenue:', err);
+  }
+}
+
+async function updateActiveUsersKpi(){
+  try{
+    const res = await fetch(`https://ga4-api.lucas-def.workers.dev/active?t=${Date.now()}`, { cache: "no-store" });
+    if(!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const val = Number(data.activeUsers ?? data.active ?? 0);
+    const el = document.getElementById('kpi-active');
+    if(el) el.textContent = val.toLocaleString();
+  }catch(err){
+    console.error('Error loading active users:', err);
+  }
+}
+
+function rangeToLabel(range){
+  const map = {
+    "1daysAgo": "Último 1 dia",
+    "7daysAgo": "Últimos 7 dias",
+    "30daysAgo": "Últimos 30 dias",
+    "90daysAgo": "Últimos 90 dias"
+  };
+  return map[range] || "Período selecionado";
+}
+
+async function renderMainChart(range = DEFAULT_RANGE) {
+  const data = await fetchGA4Data(range);
+
+  // ✅ Ordenar e formatar datas
+  const sortedData = data.sort((a, b) => a.date.localeCompare(b.date));
+  const labels = sortedData.map(d => {
+    const s = String(d.date);
+    return s.includes('-') ? s.slice(8, 10) + '/' + s.slice(5, 7) : s.slice(6, 8) + '/' + s.slice(4, 6);
+  });
+
+  const users = sortedData.map(d => d.users);
+  const sessions = sortedData.map(d => d.sessions);
+
+  // ✅ Atualiza o subtítulo conforme o filtro
+  const subtitleEl = document.getElementById('subtitle-main');
+  if (subtitleEl) subtitleEl.textContent = rangeToLabel(range);
+
+  // ✅ Recria o gráfico do zero para forçar novos eixos
+  const ctx = document.getElementById('usersSessionsChart').getContext('2d');
+  if (usersSessionsChart) {
+    usersSessionsChart.destroy();
+  }
+
+  usersSessionsChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Users',
+          data: users,
+          borderColor: '#3B82F6',
+          fill: true,
+          tension: 0.35,
+          backgroundColor: (c) => {
+            const g = c.chart.ctx.createLinearGradient(0, 0, 0, 300);
+            g.addColorStop(0, 'rgba(59,130,246,0.3)');
+            g.addColorStop(1, 'rgba(59,130,246,0)');
+            return g;
+          },
+        },
+        {
+          label: 'Sessions',
+          data: sessions,
+          borderColor: '#22C55E',
+          fill: true,
+          tension: 0.35,
+          backgroundColor: (c) => {
+            const g = c.chart.ctx.createLinearGradient(0, 0, 0, 300);
+            g.addColorStop(0, 'rgba(34,197,94,0.25)');
+            g.addColorStop(1, 'rgba(34,197,94,0)');
+            return g;
+          },
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: { duration: 400, easing: 'easeOutQuart' },
+      plugins: {
+        legend: { display: true, position: 'top' },
+        tooltip: { mode: 'index', intersect: false },
+      },
+      interaction: { mode: 'index', intersect: false },
+      scales: {
+        x: {
+          grid: { display: false },
+          ticks: { color: '#6b7280' },
+          title: { display: true, text: 'Data', color: '#6b7280' },
+        },
+        y: {
+          beginAtZero: true,
+          grid: { color: '#f0f0f0' },
+          ticks: { color: '#6b7280' },
+          title: { display: true, text: 'Total', color: '#6b7280' },
+        },
+      },
+    },
+  });
+}
+
+async function renderTopChannels(range = DEFAULT_RANGE) {
+  try {
+    const res = await fetch(`https://ga4-api.lucas-def.workers.dev/channels?range=${range}&t=${Date.now()}`, { cache: "no-store" });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const channels = await res.json();
+
+    const canvas = document.getElementById('channelsChart');
+    if (!canvas) return;
+
+    if (channelsChart) channelsChart.destroy();
+
+    channelsChart = new Chart(canvas, {
+      type: 'bar',
+      data: {
+        labels: Array.isArray(channels) ? channels.map(c => c.channel) : [],
+        datasets: [{
+          data: Array.isArray(channels) ? channels.map(c => c.sessions) : [],
+          backgroundColor: '#3B82F6',
+          borderRadius: 6
+        }]
+      },
+      options: {
+        indexAxis: 'y',
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { color: '#f0f0f0' }, ticks: { color: '#6b7280' } },
+          y: { grid: { display: false }, ticks: { color: '#6b7280' } }
+        }
+      }
+    });
+  } catch (err) {
+    console.error('Erro ao carregar canais:', err);
+  }
+}
+
+async function renderMediums(range = DEFAULT_RANGE){
+  try{
+    const res = await fetch(`https://ga4-api.lucas-def.workers.dev/mediums?range=${range}&t=${Date.now()}`, { cache: "no-store" });
+    if(!res.ok) throw new Error(`HTTP ${res.status}`);
+    const mediums = await res.json();
+
+    const el = document.getElementById('mediumsChart');
+    if(!el) return;
+    if(mediumsChart) mediumsChart.destroy();
+
+    const baseColors = ['#3B82F6','#22C55E','#F59E0B','#EF4444','#8B5CF6','#06B6D4','#D946EF','#10B981'];
+    const colors = (Array.isArray(mediums)?mediums:[]).map((_,i)=>baseColors[i%baseColors.length]);
+
+    mediumsChart = new Chart(el,{
+      type:'pie',
+      data:{
+        labels: Array.isArray(mediums)? mediums.map(m=>m.medium):[],
+        datasets:[{ data: Array.isArray(mediums)? mediums.map(m=>m.sessions):[], backgroundColor: colors }]
+      },
+      options:{
+        responsive:true,
+        plugins:{ legend:{ position:'bottom', labels:{ color:'#6b7280', font:{ size:11 } } } }
+      }
+    });
+  }catch(err){
+    console.error('Error loading mediums:', err);
+  }
+}
+
+function renderSecondaryCharts(totalSessions){
+  // Mediums chart now fetched via renderMediums(range)
+  const revenueData=[
+    {name:'google / organic',revenue:98000},
+    {name:'google / cpc',revenue:72000},
+    {name:'instagram / social',revenue:32000},
+    {name:'email / newsletter',revenue:41000},
+    {name:'direct / none',revenue:86000}
+  ];
+  new Chart(document.getElementById('revenueSourceChart'),{
+    type:'bar',
+    data:{labels:revenueData.map(r=>r.name),datasets:[{data:revenueData.map(r=>r.revenue),backgroundColor:'#8B5CF6',borderRadius:6}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},
+      scales:{x:{grid:{display:false},ticks:{color:'#6b7280'}},
+              y:{grid:{color:'#f0f0f0'},ticks:{color:'#6b7280',callback:v=>'$'+v.toLocaleString()}}}}
+  });
+}
+
+// Filtros principais
+document.addEventListener('click',e=>{
+  if(!e.target.matches('.chart-filters button'))return;
+  const btn=e.target;
+  document.querySelectorAll('#filters-main button').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  const range=btn.dataset.range;
+  currentRange = range;
+  renderMainChart(range);
+  renderTopChannels(range);
+  renderMediums(range);
+  updateRevenueKpi(range);
+});
+
+// Inicialização do dashboard
+async function initDashboard(){
+  const data = await fetchGA4Data(DEFAULT_RANGE);
+  const totalUsers = data.reduce((a,b)=>a+b.users,0);
+  const totalSessions = data.reduce((a,b)=>a+b.sessions,0);
+  const cards=document.querySelectorAll('.card .kpi-value');
+  cards[0].textContent=totalUsers.toLocaleString();
+  cards[1].textContent=totalSessions.toLocaleString();
+
+  renderMainChart(DEFAULT_RANGE);
+  renderSecondaryCharts(totalSessions);
+  renderTopChannels(DEFAULT_RANGE);
+  renderMediums(DEFAULT_RANGE);
+  await updateRevenueKpi(DEFAULT_RANGE);
+  await updateActiveUsersKpi();
+}
+
+initDashboard();
+
+// Ajuste automático de altura
+let __lastHeight=0,__heightTimer=null;
+function sendHeight(){
+  if(__heightTimer)return;
+  __heightTimer=setTimeout(()=>{
+    __heightTimer=null;
+    const h=Math.ceil(document.documentElement.scrollHeight);
+    if(Math.abs(h-__lastHeight)>2){__lastHeight=h;window.parent.postMessage({iframeHeight:h},'*');}
+  },120);
+}
+window.addEventListener('load',sendHeight);
+window.addEventListener('resize',sendHeight);
+new MutationObserver(()=>sendHeight()).observe(document.body,{childList:true,subtree:true});
+</script>
+</body>
+</html>
