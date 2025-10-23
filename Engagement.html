@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script src="https://cdn.amcharts.com/lib/5/index.js"></script>
+<script src="https://cdn.amcharts.com/lib/5/percent.js"></script>
+<script src="https://cdn.amcharts.com/lib/5/themes/Animated.js"></script>
+<title>Engagement</title>
+
+<style>
+:root{
+  --blue:#3B82F6;
+  --violet:#8B5CF6;
+  --muted:#6b7280;
+  --text:#111827;
+  --card:#ffffff;
+  --border:rgba(0,0,0,.06);
+  --shadow:0 4px 12px rgba(0,0,0,.04);
+  --radius:14px;
+}
+html,body{margin:0;padding:0;background:transparent;font-family:Inter,system-ui,-apple-system,sans-serif;color:var(--text);} 
+.container{width:100%;box-sizing:border-box;padding:10px 12px 30px;}
+.grid-kpi{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px;}
+.kpi{
+  background:var(--card);border:1px solid var(--border);box-shadow:var(--shadow);
+  border-radius:var(--radius);padding:14px 16px;text-align:left;
+}
+.kpi-label{font-size:.8rem;color:var(--muted);margin-bottom:4px;}
+.kpi-value{font-size:1.6rem;font-weight:700;color:var(--text);} 
+.kpi-trend{font-size:.8rem;color:#10B981;font-weight:500;}
+.chart-card,.panel{
+  background:var(--card);
+  border:1px solid var(--border);
+  box-shadow:var(--shadow);
+  border-radius:var(--radius);
+  padding:16px 18px;
+  margin-bottom:18px;
+  display:flex;
+  flex-direction:column;
+  justify-content:space-between;
+}
+.chart-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;} 
+.title{font-size:1rem;font-weight:600;margin:0;}
+.subtitle{font-size:.8rem;color:var(--muted);} 
+.chart-wrap{position:relative;width:100%;}
+.bottom-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:stretch;}
+@media(max-width:1000px){
+  .grid-kpi{grid-template-columns:repeat(2,1fr);}
+  .bottom-grid{grid-template-columns:1fr;}
+}
+.chart-card:has(#funnelChartDiv){min-height:420px;display:flex;flex-direction:column;justify-content:space-between;}
+.chart-card:has(#funnelChartDiv) .chart-wrap{height:calc(100% - 40px);padding:20px;box-sizing:border-box;}
+@keyframes fadeSlideIn{0%{opacity:0;transform:translateY(20px);}100%{opacity:1;transform:translateY(0);}}
+#funnelChartDiv{animation:fadeSlideIn .9s ease-out;}
+.info{
+  display:inline-block;margin-left:6px;cursor:pointer;color:var(--muted);
+  font-weight:600;font-size:.85rem;position:relative;
+} 
+.info:hover::after{
+  content: attr(data-tooltip);
+  position:absolute;left:50%;top:130%;transform:translateX(-50%);
+  background:var(--card);border:1px solid var(--border);box-shadow:var(--shadow);
+  border-radius:8px;padding:8px 10px;white-space:normal;font-size:.78rem;color:var(--text);
+  line-height:1.3;width:max-content;max-width:220px;z-index:10;
+}
+</style>
+</head>
+<body>
+<div class="container">
+
+  <!-- KPI ROW -->
+  <div class="grid-kpi">
+    <div class="kpi">
+      <div class="kpi-label">Avg. Engagement Time</div>
+      <div class="kpi-value">--</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Engaged Sessions</div>
+      <div class="kpi-value">--</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Engagement Rate</div>
+      <div class="kpi-value">--</div>
+    </div>
+    <div class="kpi">
+      <div class="kpi-label">Event Count</div>
+      <div class="kpi-value">--</div>
+    </div>
+  </div>
+
+  <!-- ENGAGEMENT CHART -->
+  <section class="chart-card">
+    <div class="chart-header">
+      <div class="title">Average Engagement Time (min)
+        <span class="info" data-tooltip="Shows the average user engagement time per day, converted to minutes.">ⓘ</span>
+      </div>
+    </div>
+    <div class="chart-wrap" style="height:300px;"><canvas id="engagementChart"></canvas></div>
+  </section>
+
+  <!-- FUNNEL + SIDE CHARTS -->
+  <div class="bottom-grid">
+    
+    <!-- Conversion Funnel -->
+    <section class="chart-card" style="height:100%;">
+      <div class="chart-header">
+        <div class="title">Conversion Funnel
+          <span class="info" data-tooltip="Visual funnel representing key engagement stages: Visitors → Engaged → Cart → Checkout → Purchase.">ⓘ</span>
+        </div>
+      </div>
+      <div class="chart-wrap">
+        <div id="funnelChartDiv" style="width:100%;height:100%;"></div>
+      </div>
+    </section>
+
+    <div>
+      <!-- Events by Name -->
+      <section class="chart-card">
+        <div class="chart-header">
+          <div class="title">Events by Name
+            <span class="info" data-tooltip="Top tracked events in GA4 (ex: view_item, add_to_cart, purchase).">ⓘ</span>
+          </div>
+        </div>
+        <div class="chart-wrap" style="height:300px;"><canvas id="eventsChart"></canvas></div>
+      </section>
+
+      <!-- Page Views -->
+      <section class="chart-card">
+        <div class="chart-header">
+          <div class="title">Page Views by Title
+            <span class="info" data-tooltip="Most viewed pages by title. Represents the count of page_view events.">ⓘ</span>
+          </div>
+        </div>
+        <div class="chart-wrap" style="height:300px;"><canvas id="pageViewsChart"></canvas></div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script>
+const API_BASE = "https://ga4-api.lucas-def.workers.dev";
+let engagementChart, eventsChart, pageViewsChart;
+
+// ===============================
+// Fetch utility
+// ===============================
+async function fetchData(endpoint) {
+  const res = await fetch(`${API_BASE}${endpoint}`, { cache: "no-store" });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+// ===============================
+// KPIs
+// ===============================
+async function updateKPIs() {
+  try {
+    const [report, engagement, events] = await Promise.all([
+      fetchData("/report?range=7daysAgo"),
+      fetchData("/engagement?range=7daysAgo"),
+      fetchData("/events?range=7daysAgo")
+    ]);
+
+    const avgEng = Math.round(engagement.averageEngagementTime || 0);
+    const mins = Math.floor(avgEng / 60);
+    const secs = avgEng % 60;
+    document.querySelectorAll(".kpi-value")[0].textContent = `${mins}m ${secs}s`;
+
+    const totalSessions = report.reduce((a, b) => a + b.sessions, 0);
+    document.querySelectorAll(".kpi-value")[1].textContent = totalSessions.toLocaleString();
+
+    const totalUsers = report.reduce((a, b) => a + b.users, 0);
+    const rate = ((totalSessions / totalUsers) * 100).toFixed(1);
+    document.querySelectorAll(".kpi-value")[2].textContent = `${rate}%`;
+
+    const totalEvents = events.reduce((a, b) => a + b.count, 0);
+    document.querySelectorAll(".kpi-value")[3].textContent = totalEvents.toLocaleString();
+  } catch (err) {
+    console.error("KPI error:", err);
+  }
+}
+
+// ===============================
+// Engagement Line Chart
+// ===============================
+async function renderEngagement() {
+  try {
+    const data = await fetchData("/report?range=30daysAgo");
+    const labels = data.map(d => d.date.slice(5));
+    const values = data.map(d => d.sessions / d.users);
+
+    const ctx = document.getElementById("engagementChart");
+    if (engagementChart) engagementChart.destroy();
+    engagementChart = new Chart(ctx, {
+      type: "line",
+      data: {
+        labels,
+        datasets: [{
+          label: "Engagement (sessions per user)",
+          data: values,
+          borderColor: "#3B82F6",
+          fill: true,
+          tension: 0.35,
+          backgroundColor: (c) => {
+            const g = c.chart.ctx.createLinearGradient(0, 0, 0, 300);
+            g.addColorStop(0, "rgba(59,130,246,0.3)");
+            g.addColorStop(1, "rgba(59,130,246,0)");
+            return g;
+          }
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { display: false }, ticks: { color: "#6b7280" } },
+          y: { grid: { color: "#f3f4f6" }, ticks: { color: "#6b7280" } }
+        }
+      }
+    });
+  } catch (err) { console.error("Engagement chart error:", err); }
+}
+
+// ===============================
+// Funnel Chart
+// ===============================
+async function renderFunnel() {
+  try {
+    const data = await fetchData("/funnel?range=30daysAgo");
+    const root = am5.Root.new("funnelChartDiv");
+    root._logo?.dispose();
+    root.setThemes([am5themes_Animated.new(root)]);
+    const chart = root.container.children.push(
+      am5percent.SlicedChart.new(root, { layout: root.verticalLayout })
+    );
+    const series = chart.series.push(
+      am5percent.FunnelSeries.new(root, {
+        valueField: "value",
+        categoryField: "category",
+        bottomRatio: 0.7
+      })
+    );
+    series.data.setAll(data.map(d => ({ category: d.event, value: d.count })));
+    series.slices.template.setAll({
+      strokeOpacity: 0,
+      fillGradient: am5.LinearGradient.new(root, {
+        rotation: 0,
+        stops: [{ color: am5.color(0x3b82f6) }, { color: am5.color(0x8b5cf6) }]
+      })
+    });
+    chart.children.push(am5.Legend.new(root, { centerX: am5.p50, x: am5.p50 }));
+  } catch (err) { console.error("Funnel error:", err); }
+}
+
+// ===============================
+// Events Chart
+// ===============================
+async function renderEvents() {
+  try {
+    const data = await fetchData("/events?range=7daysAgo");
+    const ctx = document.getElementById("eventsChart");
+    if (eventsChart) eventsChart.destroy();
+    eventsChart = new Chart(ctx, {
+      type: "bar",
+      data: {
+        labels: data.map(e => e.name),
+        datasets: [{ data: data.map(e => e.count), backgroundColor: "#8B5CF6", borderRadius: 6 }]
+      },
+      options: {
+        indexAxis: "y",
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { color: "#f3f4f6" }, ticks: { color: "#6b7280" } },
+          y: { grid: { display: false }, ticks: { color: "#6b7280" } }
+        }
+      }
+    });
+  } catch (err) { console.error("Events chart error:", err); }
+}
+
+// ===============================
+// Page Views Chart
+// ===============================
+async function renderPages() {
+  try {
+    const data = await fetchData("/pages?range=7daysAgo");
+    const ctx = document.getElementById("pageViewsChart");
+    if (pageViewsChart) pageViewsChart.destroy();
+    pageViewsChart = new Chart(ctx, {
+      type: "bar",
+      data: {
+        labels: data.map(p => p.title),
+        datasets: [{ data: data.map(p => p.views), backgroundColor: "#3B82F6", borderRadius: 6 }]
+      },
+      options: {
+        indexAxis: "y",
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          x: { grid: { color: "#f3f4f6" }, ticks: { color: "#6b7280" } },
+          y: { grid: { display: false }, ticks: { color: "#6b7280" } }
+        }
+      }
+    });
+  } catch (err) { console.error("Pages chart error:", err); }
+}
+
+// ===============================
+// Init Dashboard
+// ===============================
+async function init() {
+  await updateKPIs();
+  await renderEngagement();
+  await renderFunnel();
+  await renderEvents();
+  await renderPages();
+}
+init();
+
+// Auto resize for Noloco
+let __h = 0;
+setInterval(() => {
+  const h = document.documentElement.scrollHeight;
+  if (Math.abs(h - __h) > 5) {
+    __h = h;
+    window.parent.postMessage({ iframeHeight: h }, "*");
+  }
+}, 300);
+</script>
+</body>
+</html>
