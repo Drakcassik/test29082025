@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Demographics Dashboard</title>
+
+  <!-- amCharts -->
+  <script src="https://cdn.amcharts.com/lib/5/index.js"></script>
+  <script src="https://cdn.amcharts.com/lib/5/xy.js"></script>
+  <script src="https://cdn.amcharts.com/lib/5/percent.js"></script>
+  <script src="https://cdn.amcharts.com/lib/5/map.js"></script>
+  <script src="https://cdn.amcharts.com/lib/5/geodata/worldLow.js"></script>
+  <script src="https://cdn.amcharts.com/lib/5/themes/Animated.js"></script>
+
+  <!-- ECharts -->
+  <script src="https://fastly.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+
+  <style>
+    body {
+      margin: 0;
+      font-family: "Manrope", sans-serif;
+      background: #ffffff;
+      color: #111;
+    }
+    .dashboard {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+      padding: 20px;
+      box-sizing: border-box;
+    }
+    .cards {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+    @media (max-width: 1200px) { .cards { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 640px) { .cards { grid-template-columns: 1fr; } }
+    .card {
+      background: #fff;
+      border: 1px solid rgba(0,0,0,.06);
+      box-shadow: 0 4px 12px rgba(0,0,0,.04);
+      border-radius: 14px;
+      padding: 16px 18px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      position: relative;
+    }
+    .kpi-title { font-size: .9rem; color: #6b7280; margin: 0 0 8px; }
+    .kpi-value { font-size: 1.45rem; font-weight: 700; margin: 0 0 4px; }
+    .kpi-sub { font-size: .8rem; color: #10b981; margin: 0; }
+    .world-map {
+      height: 40vh;
+      min-height: 300px;
+      max-height: 420px;
+      background: #fff;
+      border-radius: 16px;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+      overflow: hidden;
+      position: relative;
+    }
+    #mapDiv { width: 100%; height: 100%; }
+    .lower-grid {
+      display: grid;
+      grid-template-columns: 2fr 2fr 3fr;
+      grid-auto-rows: minmax(260px, auto);
+      gap: 18px;
+      margin-top: 10px;
+    }
+    .card h3 {
+      font-size: 0.95rem;
+      font-weight: 600;
+      margin: 0 0 10px;
+      color: #333;
+      flex: 0 0 auto;
+    }
+    .card > div { flex: 1 1 auto; width: 100%; height: 100%; padding: 20px; box-sizing: border-box; display: flex; flex-direction: column; justify-content: center; }
+    #deviceUsage, #topCountries, #browserUsage, #topCities { width: 100%; height: 100%; min-height: 240px; max-height: none; }
+    .am5-logo { opacity: 0.1 !important; filter: brightness(300%) !important; }
+    @media (max-width: 1200px) { .lower-grid { grid-template-columns: 1fr 1fr; } }
+    @media (max-width: 800px) {
+      .lower-grid { grid-template-columns: 1fr; }
+      .world-map { height: 45vh; }
+    }
+    .map-header {
+      position: absolute; top: 12px; left: 16px;
+      background: rgba(255,255,255,0.9);
+      border: 1px solid rgba(0,0,0,.06);
+      box-shadow: 0 2px 8px rgba(0,0,0,.06);
+      border-radius: 10px; padding: 8px 12px;
+      font-size: .95rem; font-weight: 600; color: #374151;
+      display: flex; align-items: center; gap: 8px;
+      z-index: 2;
+    }
+  </style>
+</head>
+<body>
+  <div class="dashboard">
+    <section class="cards">
+      <div class="card">
+        <p class="kpi-title">Top Country</p>
+        <p class="kpi-value" id="kpiTopCountry">—</p>
+        <p class="kpi-sub">Most active country</p>
+      </div>
+      <div class="card">
+        <p class="kpi-title">Top City</p>
+        <p class="kpi-value" id="kpiTopCity">—</p>
+        <p class="kpi-sub">Leading city</p>
+      </div>
+      <div class="card">
+        <p class="kpi-title">Top Device</p>
+        <p class="kpi-value" id="kpiTopDevice">—</p>
+        <p class="kpi-sub">Most used device</p>
+      </div>
+      <div class="card">
+        <p class="kpi-title">Top Browser</p>
+        <p class="kpi-value" id="kpiTopBrowser">—</p>
+        <p class="kpi-sub">Most used browser</p>
+      </div>
+    </section>
+
+    <div class="world-map">
+      <div class="map-header"><span>📡</span> Real-time map</div>
+      <div id="mapDiv"></div>
+    </div>
+
+    <div class="lower-grid">
+      <div class="card" style="grid-row: 1 / span 2;">
+        <h3>📱 Device Usage</h3>
+        <div id="deviceUsage"></div>
+      </div>
+
+      <div class="card">
+        <h3>🚩 Top countries</h3>
+        <div id="topCountries"></div>
+      </div>
+
+      <div class="card" style="grid-row: 1 / span 2;">
+        <h3>🧭 Browser Usage</h3>
+        <div id="browserUsage"></div>
+      </div>
+
+      <div class="card">
+        <h3>🏙️ Top cities</h3>
+        <div id="topCities"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+  const API_BASE = "https://ga4-api.lucas-def.workers.dev";
+  const range = "7daysAgo";
+
+  function codeToFlag(code) {
+    if (!code) return "";
+    return code.replace(/./g, c => String.fromCodePoint(127397 + c.toUpperCase().charCodeAt()));
+  }
+
+  am5.ready(async function() {
+    // 🌎 Realtime Map
+    const rootMap = am5.Root.new("mapDiv");
+    rootMap.setThemes([am5themes_Animated.new(rootMap)]);
+    const chartMap = rootMap.container.children.push(am5map.MapChart.new(rootMap, {
+      projection: am5map.geoMercator(), panX: "none", panY: "none"
+    }));
+    const polygonSeries = chartMap.series.push(am5map.MapPolygonSeries.new(rootMap, {
+      geoJSON: am5geodata_worldLow, exclude: ["AQ"]
+    }));
+    const bubbleSeries = chartMap.series.push(am5map.MapPointSeries.new(rootMap, {
+      valueField: "value", polygonIdField: "id"
+    }));
+    bubbleSeries.bullets.push(root => am5.Bullet.new(root, {
+      sprite: am5.Circle.new(root, {
+        radius: 8, fill: am5.color(0xff6f61), fillOpacity: 0.8,
+        tooltipText: "{name}: [bold]{value} active[/]"
+      })
+    }));
+    async function updateRealtime() {
+      const res = await fetch(`${API_BASE}/realtime-geo`);
+      const data = await res.json();
+      bubbleSeries.data.setAll(data);
+    }
+    await updateRealtime();
+    setInterval(updateRealtime, 60000);
+
+    // 🚩 Top Countries
+    const geo = await (await fetch(`${API_BASE}/geo?range=${range}`)).json();
+    geo.sort((a,b)=>b.value-a.value);
+    document.getElementById("kpiTopCountry").textContent = `${codeToFlag(geo[0].id)} ${geo[0].name}`;
+    const chartCountries = echarts.init(document.getElementById('topCountries'));
+    chartCountries.setOption({
+      tooltip: { trigger: 'axis' },
+      grid: { left: '5%', right: '5%', top: '10%', bottom: '10%', containLabel: true },
+      xAxis: { type: 'category', data: geo.slice(0,5).map(r=>r.name), axisLabel: { rotate: 20 } },
+      yAxis: { type: 'value', splitLine: { show: false } },
+      series: [{
+        data: geo.slice(0,5).map(r=>r.value),
+        type: 'bar',
+        barWidth: '45%',
+        itemStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: '#6366F1' },
+            { offset: 1, color: '#A78BFA' }
+          ])
+        },
+        label: { show: true, position: 'top', color: '#4B5563' }
+      }]
+    });
+
+    // 🏙️ Top Cities
+    const cities = await (await fetch(`${API_BASE}/cities?range=${range}`)).json();
+    cities.sort((a,b)=>b.value-a.value);
+    document.getElementById("kpiTopCity").textContent = `${cities[0].city}, ${cities[0].country}`;
+    const chartCities = echarts.init(document.getElementById('topCities'));
+    chartCities.setOption({
+      tooltip: { trigger: 'axis' },
+      grid: { left: '5%', right: '5%', top: '10%', bottom: '10%', containLabel: true },
+      xAxis: { type: 'category', data: cities.slice(0,5).map(r=>r.city), axisLabel: { rotate: 20 } },
+      yAxis: { type: 'value', splitLine: { show: false } },
+      series: [{
+        data: cities.slice(0,5).map(r=>r.value),
+        type: 'bar',
+        barWidth: '45%',
+        itemStyle: {
+          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+            { offset: 0, color: '#06b6d4' },
+            { offset: 1, color: '#0ea5e9' }
+          ])
+        },
+        label: { show: true, position: 'top', color: '#4B5563' }
+      }]
+    });
+
+    // 💻 Top Device KPI
+    const devicesData = await (await fetch(`${API_BASE}/conversion-device?range=${range}`)).json();
+    if (devicesData.length > 0) {
+      const topDevice = devicesData.sort((a,b)=>b.sessions - a.sessions)[0];
+      document.getElementById("kpiTopDevice").textContent =
+        `${topDevice.device.charAt(0).toUpperCase() + topDevice.device.slice(1)}`;
+    }
+
+    // 🌐 Top Browser KPI
+    const browsersData = await (await fetch(`${API_BASE}/browsers?range=${range}`)).json();
+    if (browsersData.length > 0) {
+      const topBrowser = browsersData.sort((a,b)=>b.sessions - a.sessions)[0];
+      document.getElementById("kpiTopBrowser").textContent = `${topBrowser.browser}`;
+    }
+
+    // 📱 Device Usage
+    async function fetchDevices() {
+      const resp = await fetch(`${API_BASE}/conversion-device?range=${range}`);
+      const data = await resp.json();
+      return data.map(d => ({
+        name: d.device || "Unknown",
+        value: d.sessions || 0
+      }));
+    }
+    const deviceDom = document.getElementById('deviceUsage');
+    const deviceChart = echarts.init(deviceDom, null, { renderer: 'svg' });
+    async function refreshDevice() {
+      const items = await fetchDevices();
+      deviceChart.setOption({
+        tooltip: { trigger: 'item' },
+        legend: { top: '5%', left: 'center' },
+        series: [{
+          type: 'pie',
+          radius: ['40%', '70%'],
+          label: { formatter: '{b}: {d}%' },
+          data: items
+        }]
+      });
+    }
+    await refreshDevice();
+
+    // 🧭 Browser Usage
+    async function fetchBrowsers() {
+      const resp = await fetch(`${API_BASE}/browsers?range=${range}`);
+      const data = await resp.json();
+      return data.map(b => ({
+        name: b.browser || "Unknown",
+        value: b.sessions || 0
+      }));
+    }
+    const browserDom = document.getElementById('browserUsage');
+    const browserChart = echarts.init(browserDom, null, { renderer: 'svg' });
+    async function refreshBrowser() {
+      const items = await fetchBrowsers();
+      browserChart.setOption({
+        tooltip: { trigger: 'axis' },
+        xAxis: { type: 'value' },
+        yAxis: { type: 'category', data: items.map(i=>i.name), inverse: true },
+        series: [{
+          type: 'bar',
+          data: items.map(i=>i.value),
+          label: { show: true, position: 'right' },
+          itemStyle: { color: '#7c3aed' }
+        }]
+      });
+    }
+    await refreshBrowser();
+  });
+  </script>
+</body>
+</html>
