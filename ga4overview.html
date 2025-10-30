@@ -50,6 +50,49 @@ html,body{margin:0;padding:0;background:transparent;font-family:Inter,system-ui,
 .chart-filters button.active{background:var(--blue);color:white;border-color:var(--blue);}
 .chart-spacer-top{margin-top:24px;}
 @media(min-width:768px){.chart-spacer-top{margin-top:32px;}}
+
+/* Aviso de dados ausentes: pequeno, vermelho, em canto direito */
+.chart-note{
+  color:#dc2626; /* vermelho */
+  font-size:.75rem; /* menor que corpo */
+  text-align:right; /* canto direito */
+  margin:4px 0 10px; /* espaço antes do chart */
+  line-height:1.2;
+  opacity:.95;
+  user-select:none;
+}
+@media(max-width:768px){.chart-note{font-size:.7rem; margin-bottom:12px}}
+@media(max-width:480px){.chart-note{font-size:.68rem; margin-bottom:12px}}
+
+/* Responsividade adicional */
+html, body, .container{max-width:100%;overflow-x:hidden}
+
+/* Até 1024px: ajustar alturas e espaçamentos leves */
+@media(max-width:1024px){
+  .chart-wrap{height:320px}
+  .panel{padding:14px 16px}
+}
+
+/* Tablet 768px: otimizar tipografia e gráficos */
+@media(max-width:768px){
+  .title{font-size:.95rem}
+  .subtitle{font-size:.78rem}
+  .kpi-value{font-size:1.3rem}
+  .kpi-title{font-size:.85rem}
+  .chart-header{margin-bottom:10px}
+  .chart-wrap{height:280px}
+  .panel{padding:12px 14px}
+}
+
+/* Smartphones ≤480px: foco em legibilidade e toque */
+@media(max-width:480px){
+  .container{padding:8px 10px 16px}
+  .cards{gap:10px}
+  .kpi-value{font-size:1.2rem}
+  .kpi-title{font-size:.82rem}
+  .chart-wrap{height:240px}
+  .chart-filters button{padding:4px 6px;font-size:.72rem}
+}
 </style>
 </head>
 <body>
@@ -89,16 +132,16 @@ html,body{margin:0;padding:0;background:transparent;font-family:Inter,system-ui,
     <div class="panel">
       <h3>Sessions by Traffic Medium</h3>
       <p class="muted">Sessions by Traffic Medium</p>
-      <div style="display:flex;justify-content:center;align-items:center;height:280px;">
-        <canvas id="mediumsChart" style="width:220px;height:220px;"></canvas>
+      <div class="chart-wrap" style="height:280px;display:flex;align-items:center;justify-content:center;">
+        <canvas id="mediumsChart"></canvas>
       </div>
     </div>
   </section>
 
   <section class="chart-card chart-spacer-top">
     <div class="chart-header"><div class="title">Revenue by Source / Medium</div><div class="subtitle">Total revenue distribution</div></div>
-    <div class="chart-wrap"><canvas id="revenueSourceChart"></canvas></div>
     <div class="chart-note">Waiting to collect sales data for the graph to work</div>
+    <div class="chart-wrap"><canvas id="revenueSourceChart"></canvas></div>
   </section>
 </div>
 
@@ -108,6 +151,21 @@ let channelsChart;
 let mediumsChart;
 const DEFAULT_RANGE = "30daysAgo";
 let currentRange = DEFAULT_RANGE;
+
+// Utilitário de responsividade para gráficos
+function getViewportSizes(){
+  const vw = window.innerWidth || document.documentElement.clientWidth || 1024;
+  const isPhone = vw <= 480;
+  const isTablet = vw > 480 && vw <= 768;
+  return {
+    vw, isPhone, isTablet,
+    tickSize: isPhone ? 10 : isTablet ? 11 : 12,
+    legendSize: isPhone ? 10 : isTablet ? 11 : 12,
+    titleSize: isPhone ? 11 : isTablet ? 12 : 13,
+    pointRadius: isPhone ? 2 : 3,
+    borderWidth: isPhone ? 1.5 : 2
+  };
+}
 
 async function fetchGA4Data(range=DEFAULT_RANGE){
   const res = await fetch(`https://ga4-api.lucas-def.workers.dev/report?range=${range}&t=${Date.now()}`, { cache: "no-store" });
@@ -173,6 +231,14 @@ async function renderMainChart(range = DEFAULT_RANGE) {
     usersSessionsChart.destroy();
   }
 
+  // Fonte responsiva via utilitário
+  const S = getViewportSizes();
+  const tickSize = S.tickSize;
+  const legendSize = S.legendSize;
+  const titleSize = S.titleSize;
+  const pointRadius = S.pointRadius;
+  const borderWidth = S.borderWidth;
+
   usersSessionsChart = new Chart(ctx, {
     type: 'line',
     data: {
@@ -184,6 +250,8 @@ async function renderMainChart(range = DEFAULT_RANGE) {
           borderColor: '#3B82F6',
           fill: true,
           tension: 0.35,
+          pointRadius,
+          borderWidth,
           backgroundColor: (c) => {
             const g = c.chart.ctx.createLinearGradient(0, 0, 0, 300);
             g.addColorStop(0, 'rgba(59,130,246,0.3)');
@@ -197,6 +265,8 @@ async function renderMainChart(range = DEFAULT_RANGE) {
           borderColor: '#22C55E',
           fill: true,
           tension: 0.35,
+          pointRadius,
+          borderWidth,
           backgroundColor: (c) => {
             const g = c.chart.ctx.createLinearGradient(0, 0, 0, 300);
             g.addColorStop(0, 'rgba(34,197,94,0.25)');
@@ -209,23 +279,23 @@ async function renderMainChart(range = DEFAULT_RANGE) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      animation: { duration: 400, easing: 'easeOutQuart' },
+      animation: { duration: S.isPhone ? 250 : 400, easing: 'easeOutQuart' },
       plugins: {
-        legend: { display: true, position: 'top' },
+        legend: { display: true, position: S.isPhone ? 'bottom' : 'top', labels:{ font:{ size: legendSize }, color:'#6b7280' } },
         tooltip: { mode: 'index', intersect: false },
       },
       interaction: { mode: 'index', intersect: false },
       scales: {
         x: {
           grid: { display: false },
-          ticks: { color: '#6b7280' },
-          title: { display: true, text: 'Data', color: '#6b7280' },
+          ticks: { color: '#6b7280', font:{ size: tickSize } },
+          title: { display: true, text: 'Data', color: '#6b7280', font:{ size: titleSize } },
         },
         y: {
           beginAtZero: true,
           grid: { color: '#f0f0f0' },
-          ticks: { color: '#6b7280' },
-          title: { display: true, text: 'Total', color: '#6b7280' },
+          ticks: { color: '#6b7280', font:{ size: tickSize } },
+          title: { display: true, text: 'Total', color: '#6b7280', font:{ size: titleSize } },
         },
       },
     },
@@ -259,8 +329,8 @@ async function renderTopChannels(range = DEFAULT_RANGE) {
         maintainAspectRatio: false,
         plugins: { legend: { display: false } },
         scales: {
-          x: { grid: { color: '#f0f0f0' }, ticks: { color: '#6b7280' } },
-          y: { grid: { display: false }, ticks: { color: '#6b7280' } }
+          x: { grid: { color: '#f0f0f0' }, ticks: { color: '#6b7280', font:{ size: getViewportSizes().tickSize } } },
+          y: { grid: { display: false }, ticks: { color: '#6b7280', font:{ size: getViewportSizes().tickSize } } }
         }
       }
     });
@@ -282,6 +352,7 @@ async function renderMediums(range = DEFAULT_RANGE){
     const baseColors = ['#3B82F6','#22C55E','#F59E0B','#EF4444','#8B5CF6','#06B6D4','#D946EF','#10B981'];
     const colors = (Array.isArray(mediums)?mediums:[]).map((_,i)=>baseColors[i%baseColors.length]);
 
+    const S2 = getViewportSizes();
     mediumsChart = new Chart(el,{
       type:'pie',
       data:{
@@ -290,7 +361,7 @@ async function renderMediums(range = DEFAULT_RANGE){
       },
       options:{
         responsive:true,
-        plugins:{ legend:{ position:'bottom', labels:{ color:'#6b7280', font:{ size:11 } } } }
+        plugins:{ legend:{ position:'bottom', labels:{ color:'#6b7280', font:{ size: S2.legendSize } } } }
       }
     });
   }catch(err){
@@ -340,9 +411,22 @@ async function initDashboard(){
   cards[1].textContent=totalSessions.toLocaleString();
 
   renderMainChart(DEFAULT_RANGE);
-  renderSecondaryCharts(totalSessions);
-  renderTopChannels(DEFAULT_RANGE);
-  renderMediums(DEFAULT_RANGE);
+  // Lazy render dos gráficos secundários quando entrarem na viewport
+  const targets = [
+    { el: document.getElementById('channelsChart'), fn: ()=>renderTopChannels(DEFAULT_RANGE) },
+    { el: document.getElementById('mediumsChart'), fn: ()=>renderMediums(DEFAULT_RANGE) },
+    { el: document.getElementById('revenueSourceChart'), fn: ()=>renderSecondaryCharts(totalSessions) }
+  ];
+  const io = new IntersectionObserver((entries)=>{
+    entries.forEach(e=>{
+      if(e.isIntersecting){
+        const t = targets.find(x=>x.el===e.target);
+        if(t && !t.__done){ t.fn(); t.__done=true; io.unobserve(t.el); }
+      }
+    });
+  },{root:null,threshold:.2});
+  targets.forEach(t=>{ if(t.el) io.observe(t.el); });
+
   await updateRevenueKpi(DEFAULT_RANGE);
   await updateActiveUsersKpi();
 }
@@ -362,6 +446,19 @@ function sendHeight(){
 window.addEventListener('load',sendHeight);
 window.addEventListener('resize',sendHeight);
 new MutationObserver(()=>sendHeight()).observe(document.body,{childList:true,subtree:true});
+
+// Atualiza estilos dos gráficos ao redimensionar
+let __resizeTimer=null;
+window.addEventListener('resize',()=>{
+  clearTimeout(__resizeTimer);
+  __resizeTimer=setTimeout(()=>{
+    try{
+      if(usersSessionsChart){ renderMainChart(currentRange||DEFAULT_RANGE); }
+      if(channelsChart){ renderTopChannels(currentRange||DEFAULT_RANGE); }
+      if(mediumsChart){ renderMediums(currentRange||DEFAULT_RANGE); }
+    }catch(_){ }
+  },160);
+});
 </script>
 </body>
 </html>
