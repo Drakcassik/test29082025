@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Boketto – Inventory Dashboard</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
   <style>
     :root{
       --accent:#8B5CF6;
@@ -60,7 +61,8 @@
 
     /* CANVAS HEIGHTS */
     .chart-wrap{width:100%;height:420px;position:relative;box-sizing:border-box;}
-    #invByCat{width:100%!important;height:360px!important;display:block}
+    #invByCatCanvas{width:100%!important;height:360px!important;display:block}
+    #invByCatEcharts{width:100%!important;height:360px!important;display:none}
     #turnoverChart{width:100%!important;height:360px!important;display:block}
 
     /* GRID INFERIOR */
@@ -107,6 +109,51 @@
     .alert-list::-webkit-scrollbar-thumb {background: rgba(0,0,0,.15);border-radius: 4px;}
     .alert-list::-webkit-scrollbar-thumb:hover {background: rgba(0,0,0,.25);}
 
+    /* Tablet: 768–1023px — ajustar proporções e leitura */
+    @media (min-width: 768px) and (max-width: 1023px) {
+      /* Reordenar blocos: Alerts -> Turnover -> Inventory by Category */
+      .container{display:flex;flex-direction:column}
+      .cards{order:0}
+      .bottom{order:1;display:flex;flex-direction:column;gap:16px}
+      .bottom .panel:first-child{order:2} /* Turnover */
+      .bottom .panel:last-child{order:1}  /* Alerts */
+      .chart-card{order:3}
+
+      .panel{padding:14px}
+      .title{font-size:1.05rem}
+      .subtitle{font-size:.9rem}
+      .chart-header{margin-bottom:16px}
+      .chart-wrap{height:auto; min-height:340px}
+      #invByCatCanvas{height:340px!important}
+      #invByCatEcharts{height:340px!important}
+      #turnoverChart{height:340px!important}
+      .alert-list{max-height:340px}
+      .pill{min-height:36px;padding:8px 10px}
+    }
+
+    /* Mobile: ≤767px — foco em legibilidade e toque */
+    @media (max-width: 767px) {
+      /* Reordenar blocos: Alerts -> Turnover -> Inventory by Category */
+      .container{display:flex;flex-direction:column}
+      .cards{order:0}
+      .bottom{order:1;display:flex;flex-direction:column;gap:12px}
+      .bottom .panel:first-child{order:2} /* Turnover */
+      .bottom .panel:last-child{order:1}  /* Alerts */
+      .chart-card{order:3}
+
+      .panel{padding:12px}
+      .title{font-size:1rem}
+      .subtitle{font-size:.85rem}
+      .chart-header{margin-bottom:10px;padding:14px 16px 0}
+      .chart-wrap{height:auto; min-height:280px}
+      #invByCatCanvas{height:280px!important}
+      #invByCatEcharts{height:280px!important}
+      #turnoverChart{height:280px!important}
+      .alert-list{max-height:280px}
+      .pill{min-height:34px;padding:6px 8px}
+      .cards{grid-template-columns:1fr;gap:12px}
+    }
+
     @media (max-width: 768px) {
       html, body {height: 100%;overflow-y: auto;-webkit-overflow-scrolling: touch;}
       .container {min-height: 100vh;overflow-x: hidden;}
@@ -152,7 +199,10 @@
       </div>
     </div>
     <div class="chart-wrap">
-      <canvas id="invByCat"></canvas>
+      <div id="invByCatContainer" style="width:100%;height:100%">
+        <canvas id="invByCatCanvas"></canvas>
+        <div id="invByCatEcharts"></div>
+      </div>
     </div>
   </section>
 
@@ -265,25 +315,86 @@ function computeKpis(items){
   return { totalSkus, totalUnits, lowStock };
 }
 
-/* ---- CATEGORY CHART ---- */
-let invCatChart = null;
-function buildByCategory(items){
+/* ---- CATEGORY CHART (Responsive: Chart.js desktop, ECharts mobile/tablet) ---- */
+let invCatChart = null; // Chart.js instance
+let invCatE = null;     // ECharts instance
+
+function buildByCategoryFull(items){
   const map = {};
   items.forEach(i=>{ const cat=i.base||'Uncategorized'; map[cat]=(map[cat]||0)+i.total; });
   const entries = Object.entries(map).sort((a,b)=>b[1]-a[1]);
-  const total = entries.reduce((s,[_k,v])=>s+v,0)||1;
+  const totalUnits = entries.reduce((s,[_k,v])=>s+v,0)||1;
   const labels = entries.map(e=>e[0]);
-  const values = entries.map(e=> +(e[1]*100/total).toFixed(2));
-  return { labels, values };
+  const valuesPercent = entries.map(e=> +(e[1]*100/totalUnits).toFixed(2));
+  const valuesRaw = entries.map(e=> e[1]);
+  return { labels, valuesPercent, valuesRaw, totalUnits };
 }
-function renderInvByCategory({labels,values}){
-  const ctx=document.getElementById('invByCat').getContext('2d');
+
+function renderInvByCategoryChartJS({labels,valuesPercent}){
+  const ctx=document.getElementById('invByCatCanvas').getContext('2d');
+  if(invCatE){ try{ invCatE.dispose(); }catch(_){} }
+  const canvasEl=document.getElementById('invByCatCanvas');
+  const echartsEl=document.getElementById('invByCatEcharts');
+  if(echartsEl) echartsEl.style.display='none';
+  if(canvasEl) canvasEl.style.display='block';
   if(invCatChart) invCatChart.destroy();
-  invCatChart=new Chart(ctx,{type:'bar',data:{labels,datasets:[{data:values,backgroundColor:'#8B5CF6',maxBarThickness:36,borderWidth:0}]},
+  invCatChart=new Chart(ctx,{type:'bar',data:{labels,datasets:[{data:valuesPercent,backgroundColor:'#8B5CF6',maxBarThickness:36,borderWidth:0}]},
     options:{responsive:true,maintainAspectRatio:false,animation:false,
       plugins:{legend:{display:false},tooltip:{callbacks:{label:(ctx)=>` ${ctx.parsed.y.toFixed(1)}%`}}},
       scales:{x:{ticks:{color:'#6b7280'},grid:{drawBorder:false,color:'rgba(0,0,0,.06)'}},
               y:{beginAtZero:true,max:100,ticks:{color:'#6b7280',callback:(v)=>v+'%'},grid:{drawBorder:false,color:'rgba(0,0,0,.06)'}}}}});
+}
+
+function renderInvByCategoryECharts({labels,valuesRaw,valuesPercent}){
+  const canvasEl=document.getElementById('invByCatCanvas');
+  const echartsEl=document.getElementById('invByCatEcharts');
+  if(invCatChart){ try{ invCatChart.destroy(); }catch(_){} }
+  if(canvasEl) canvasEl.style.display='none';
+  if(echartsEl) echartsEl.style.display='block';
+
+  // Altura dinâmica: 1 barra por produto, ok ficar comprido
+  try{
+    const w = window.innerWidth || document.documentElement.clientWidth || 1024;
+    const perItem = (w <= 767) ? 44 : 40; // um pouco mais alto no mobile
+    const h = Math.max(260, labels.length * perItem);
+    const wrap = document.getElementById('invByCatContainer');
+    if(wrap){ wrap.style.setProperty('height', h+'px', 'important'); }
+    if(echartsEl){ echartsEl.style.setProperty('height', h+'px', 'important'); }
+  }catch(_){ /* noop */ }
+
+  if(invCatE){ try{ invCatE.dispose(); }catch(_){} }
+  invCatE = echarts.init(echartsEl);
+  const source = [['score','amount','product']];
+  for(let i=0;i<labels.length;i++){
+    source.push([valuesPercent[i], valuesRaw[i], labels[i]]);
+  }
+  const option = {
+    dataset: { source },
+    grid: { containLabel: true },
+    xAxis: { name: 'amount', axisLine:{lineStyle:{color:'#a3a3a3'}}, axisLabel:{color:'#6b7280'} },
+    yAxis: { type: 'category', axisLine:{lineStyle:{color:'#a3a3a3'}}, axisLabel:{color:'#6b7280'} },
+    visualMap: {
+      orient: 'horizontal', left: 'center', min: 0, max: 100,
+      text: ['High Score','Low Score'], dimension: 0,
+      inRange: { color: ['#ddd6fe','#a78bfa','#8b5cf6'] }
+    },
+    tooltip: { formatter: (p)=> `${p.name}: ${Number(p.value[1]).toLocaleString('pt-BR')}` },
+    series: [{ type: 'bar', encode: { x: 'amount', y: 'product' }, itemStyle:{borderRadius:[4,4,0,0]}, barCategoryGap:'20%' }]
+  };
+  invCatE.setOption(option);
+  try{ invCatE.resize(); }catch(_){ }
+  // Atualiza altura do iframe após ajustar o gráfico
+  try{ setTimeout(sendHeight, 80); }catch(_){ }
+}
+
+function renderInvByCategoryResponsive(items){
+  const data = buildByCategoryFull(items);
+  const w = window.innerWidth || document.documentElement.clientWidth || 1024;
+  if(w >= 1024){
+    renderInvByCategoryChartJS({labels:data.labels, valuesPercent:data.valuesPercent});
+  }else{
+    renderInvByCategoryECharts({labels:data.labels, valuesRaw:data.valuesRaw, valuesPercent:data.valuesPercent});
+  }
 }
 
 /* ---- TURNOVER ---- */
@@ -348,12 +459,23 @@ async function loadAll(){
   document.getElementById('kpiUnits').textContent=totalUnits.toLocaleString('pt-BR');
   document.getElementById('kpiLowStock').textContent=lowStock.toLocaleString('pt-BR');
   document.getElementById('kpiCogs').textContent='—';
-  renderInvByCategory(buildByCategory(items));
+  renderInvByCategoryResponsive(items);
   renderTurnover(buildTurnoverSeries(totalUnits));
   renderAlerts(items);
   sendHeight();
 }
 loadAll();
+
+// Redesenhar ao redimensionar para manter o gráfico correto por breakpoint
+let __resizeTimer=null;
+window.addEventListener('resize',()=>{
+  clearTimeout(__resizeTimer);
+  __resizeTimer=setTimeout(()=>{
+    // Tentamos reconstruir com os dados mais recentes renderizados
+    // Busca mínima a partir dos elementos já mostrados não é viável, então recarregamos
+    loadAll();
+  },150);
+});
 </script>
 </body>
 </html>
