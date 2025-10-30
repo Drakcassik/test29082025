@@ -40,6 +40,7 @@ html,body{margin:0;padding:0;background:transparent;font-family:Inter,system-ui,
   display:flex;
   flex-direction:column;
   justify-content:space-between;
+  position:relative;
 }
 .chart-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;} 
 .title{font-size:1rem;font-weight:600;margin:0;}
@@ -47,8 +48,33 @@ html,body{margin:0;padding:0;background:transparent;font-family:Inter,system-ui,
 .chart-wrap{position:relative;width:100%;}
 .bottom-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:stretch;}
 @media(max-width:1000px){
-  .grid-kpi{grid-template-columns:repeat(2,1fr);}
+  .grid-kpi{grid-template-columns:repeat(2,1fr);} 
   .bottom-grid{grid-template-columns:1fr;}
+}
+/* Harmonizar espaçamento entre cards no mobile */
+@media(max-width:480px){
+  .bottom-grid{gap:18px}
+}
+/* Mobile-only tweaks for better funnel visualization */
+@media(max-width:480px){
+  .chart-card:has(#funnelChartDiv){
+    min-height:560px;
+    justify-content:flex-start;
+    overflow:visible;
+    z-index:2;
+    margin-bottom:22px;
+  }
+  .chart-card:has(#funnelChartDiv) .chart-wrap{
+    height:auto !important;
+    padding:12px 12px 8px;
+    box-sizing:border-box;
+  }
+  #funnelChartDiv{
+    height:auto !important;
+    min-height:360px;
+  }
+  #funnelLabelsMobile{padding:6px 12px 12px;position:relative;z-index:3}
+  .bottom-grid .chart-card{z-index:1}
 }
 .chart-card:has(#funnelChartDiv){min-height:420px;display:flex;flex-direction:column;justify-content:space-between;}
 .chart-card:has(#funnelChartDiv) .chart-wrap{height:calc(100% - 40px);padding:20px;box-sizing:border-box;}
@@ -64,6 +90,16 @@ html,body{margin:0;padding:0;background:transparent;font-family:Inter,system-ui,
   background:var(--card);border:1px solid var(--border);box-shadow:var(--shadow);
   border-radius:8px;padding:8px 10px;white-space:normal;font-size:.78rem;color:var(--text);
   line-height:1.3;width:max-content;max-width:220px;z-index:10;
+}
+
+/* Labels organizados abaixo do funil (apenas mobile) */
+.funnel-labels-mobile{display:none;margin:8px 0 0 0}
+.funnel-labels-mobile .funnel-label{display:flex;align-items:center;gap:6px;color:#374151}
+.funnel-labels-mobile .dot{width:8px;height:8px;border-radius:50%;background:linear-gradient(90deg,#3B82F6,#8B5CF6)}
+.funnel-labels-mobile .text{font-size:.85rem;line-height:1.2}
+.funnel-labels-mobile .value{color:var(--muted)}
+@media(max-width:480px){
+  .funnel-labels-mobile{display:grid;grid-template-columns:1fr 1fr;gap:8px 12px}
 }
 </style>
 </head>
@@ -113,6 +149,8 @@ html,body{margin:0;padding:0;background:transparent;font-family:Inter,system-ui,
       <div class="chart-wrap">
         <div id="funnelChartDiv" style="width:100%;height:100%;"></div>
       </div>
+      <!-- Labels organizados abaixo do funil (somente mobile) -->
+      <div id="funnelLabelsMobile" class="funnel-labels-mobile"></div>
     </section>
 
     <div>
@@ -233,6 +271,7 @@ async function renderFunnel() {
     const root = am5.Root.new("funnelChartDiv");
     root._logo?.dispose();
     root.setThemes([am5themes_Animated.new(root)]);
+    const isPhone = window.matchMedia('(max-width: 480px)').matches;
     const chart = root.container.children.push(
       am5percent.SlicedChart.new(root, { layout: root.verticalLayout })
     );
@@ -240,10 +279,13 @@ async function renderFunnel() {
       am5percent.FunnelSeries.new(root, {
         valueField: "value",
         categoryField: "category",
-        bottomRatio: 0.7
+        bottomRatio: isPhone ? 0.6 : 0.7,
+        orientation: "vertical",
+        alignLabels: true
       })
     );
-    series.data.setAll(data.map(d => ({ category: d.event, value: d.count })));
+    const items = data.map(d => ({ category: d.event, value: d.count }));
+    series.data.setAll(items);
     series.slices.template.setAll({
       strokeOpacity: 0,
       fillGradient: am5.LinearGradient.new(root, {
@@ -251,7 +293,30 @@ async function renderFunnel() {
         stops: [{ color: am5.color(0x3b82f6) }, { color: am5.color(0x8b5cf6) }]
       })
     });
-    chart.children.push(am5.Legend.new(root, { centerX: am5.p50, x: am5.p50 }));
+    // Mobile: esconder labels/ticks e exibir textos abaixo do funil
+    if(isPhone){
+      series.labels.template.setAll({ visible: false });
+      series.ticks.template.setAll({ visible: false });
+      chart.setAll({ paddingLeft: 8, paddingRight: 8, paddingTop: 8, paddingBottom: 8 });
+      const total = items.reduce((a,b)=>a + (Number(b.value)||0), 0);
+      const container = document.getElementById('funnelLabelsMobile');
+      if(container){
+        container.innerHTML = items.map(it => {
+          const pct = total > 0 ? ((Number(it.value)/total)*100).toFixed(2) : '0.00';
+          return `<div class="funnel-label"><span class="dot"></span><span class="text">${it.category}: <span class="value">${pct}%</span></span></div>`;
+        }).join('');
+      }
+    } else {
+      // Desktop/Tablet: manter labels e legenda padrão
+      series.labels.template.setAll({
+        text: "{category}: {valuePercentTotal.formatNumber('0.00p')}",
+        fontSize: 12,
+        rotation: 0
+      });
+      chart.children.push(am5.Legend.new(root, { centerX: am5.p50, x: am5.p50 }));
+      const container = document.getElementById('funnelLabelsMobile');
+      if(container) container.innerHTML = '';
+    }
   } catch (err) { console.error("Funnel error:", err); }
 }
 
