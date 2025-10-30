@@ -4,7 +4,9 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Boketto – Dashboard Embed</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js" defer></script>
+  <!-- ECharts para o gráfico de Collections -->
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js" defer></script>
   <style>
     :root{
       --accent:#8B5CF6;
@@ -32,8 +34,10 @@
       gap:16px;
       margin-bottom:18px;
     }
-    @media(max-width:1200px){ .cards{ grid-template-columns: repeat(2, 1fr);} }
-    @media(max-width:640px){  .cards{ grid-template-columns: 1fr; } }
+    /* Tablet: 2 colunas */
+    @media (min-width:768px) and (max-width:1023px){ .cards{ grid-template-columns: repeat(2, 1fr);} }
+    /* Mobile: 1 coluna */
+    @media (max-width:767px){ .cards{ grid-template-columns: 1fr; gap:12px; } }
 
     .card{
       background:var(--card);
@@ -70,10 +74,11 @@
     .pill.active{background:var(--accent);color:#fff}
     #refreshBtn{border:none;border-radius:8px;padding:6px 12px;font-size:.85rem;background:#f3f4f6;color:#111827}
     #refreshBtn:hover{background:#e5e7eb}
-    #salesChart{width:100%!important;height:360px!important}
+    /* Gráfico ocupa o contêiner para manter proporção responsiva */
+    #salesChart{width:100%!important;height:100%!important;display:block}
 
     /* Altura fixa apenas para o ranking (barras). */
-    #productRankingChart{width:100%!important;height:360px!important;display:block}
+    #productRankingChart{width:100%!important;height:320px!important;display:block}
 
     /* Gráfico de pizza com proporções melhoradas */
     .collection-container {
@@ -82,22 +87,17 @@
       justify-content: space-between;
       height: 320px;
       padding: 0 20px;
+      gap: 12px;
     }
     .chart-container {
-      width: 45%;
+      width: 100%; /* ocupa todo o painel ao usar legenda interna do ECharts */
       height: 100%;
       display: flex;
       align-items: center;
       justify-content: center;
     }
-    .legend-container {
-      width: 45%;
-      display: flex;
-      flex-wrap: wrap;
-      justify-content: center;
-      align-content: center;
-      column-gap: 10px;
-    }
+    /* legenda externa não é mais usada */
+    .legend-container { display: none; }
     .legend-item {
       display: flex;
       align-items: center;
@@ -111,9 +111,10 @@
       margin-right: 5px;
     }
     #collectionChart {
-      width: 280px;
-      height: 280px;
+      width: 100%;
+      height: 100%; /* ECharts precisa de altura definida */
       margin: 0 auto;
+      display: block;
     }
 
     .loading,.empty,.error{
@@ -123,7 +124,7 @@
     .hidden{display:none!important}
     .chart-wrap{
       width:100%;
-      height:420px;
+      height:380px;
       position:relative;
       box-sizing:border-box;
     }
@@ -134,7 +135,7 @@
       grid-template-columns: 1fr 1fr;
       gap:16px;
     }
-    @media(max-width:1000px){ .bottom{ grid-template-columns: 1fr; } }
+    @media (max-width:767px){ .bottom{ grid-template-columns: 1fr; } }
 
     .panel{
       background:var(--card);
@@ -146,10 +147,88 @@
     .panel h3{margin:0 0 10px;font-size:1.02rem}
     .panel p.muted{margin:0 0 14px;color:var(--muted);font-size:.9rem}
 
-    /* --- MOBILE SCROLL --- */
-    @media (max-width: 768px) {
+    /* --- MOBILE --- */
+    @media (max-width: 767px) {
       html, body { height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch; }
       .container { min-height: 100vh; overflow-x: hidden; }
+
+      /* Tipografia e espaçamento */
+      .kpi-title{ font-size:.9rem; }
+      .kpi-value{ font-size:1.4rem; }
+      .kpi-sub{ font-size:.8rem; }
+      .panel{ padding:16px 16px; }
+
+      /* Header do gráfico */
+      .chart-header{
+        margin-bottom:16px;
+        padding:14px 14px 0 14px;
+      }
+      .title{ font-size:1rem; }
+      .subtitle{ font-size:.8rem; }
+
+      /* Controles de toque maiores e acessíveis */
+      .controls{ gap:6px; flex-wrap:wrap; }
+      .pill, #refreshBtn{
+        min-height:40px;
+        padding:10px 14px;
+        font-size:.95rem;
+        touch-action: manipulation;
+      }
+      .pill:focus-visible, #refreshBtn:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; }
+
+      /* Alturas dos gráficos */
+      .chart-wrap{ height:260px; }
+      #productRankingChart{ height:260px!important; }
+
+      /* Grid inferior em coluna */
+      .collection-container{ flex-direction: column; height:auto; padding: 0 12px; }
+      .chart-container{ width:100%; height:auto; }
+      .legend-container{ width:100%; }
+      .legend-item{ width:100%; }
+      #collectionChart{ width:100%; height:260px; } /* altura explícita para ECharts em mobile */
+    }
+
+    /* --- MOBILE PEQUENO --- */
+    @media (max-width: 480px) {
+      .chart-wrap{ height:230px; }
+      #productRankingChart{ height:230px!important; }
+      .cards{ gap:12px; }
+      .panel{ padding:14px; }
+    }
+
+    /* --- LANDSCAPE EM MOBILE --- */
+    @media (orientation: landscape) and (max-width: 767px) {
+      .chart-wrap{ height:220px; }
+      #productRankingChart{ height:220px!important; }
+    }
+    
+    /* --- TABLET (768px–1023px) --- */
+    @media (min-width: 768px) and (max-width: 1023px) {
+      .chart-header{ margin-bottom:24px; padding:18px 22px 0 22px; }
+      .title{ font-size:1.1rem; }
+      .subtitle{ font-size:.9rem; }
+      .panel{ padding:18px 20px; }
+      .panel h3{ font-size:1.05rem; }
+      .panel p.muted{ font-size:.9rem; }
+      .chart-wrap{ height:320px; }
+      #productRankingChart{ height:300px!important; }
+      .collection-container{ height:320px; }
+      .bottom{ grid-template-columns: 1fr; gap:16px; }
+    }
+
+    /* --- DESKTOP (>=1024px) --- */
+    @media (min-width: 1024px) {
+      .cards{ grid-template-columns: repeat(4, 1fr); gap:20px; }
+      .chart-header{ margin-bottom:36px; padding:24px 36px 0 36px; }
+      .title{ font-size:1.2rem; }
+      .subtitle{ font-size:.95rem; }
+      .panel{ padding:24px 26px; }
+      .panel h3{ font-size:1.1rem; }
+      .panel p.muted{ font-size:.95rem; }
+      .chart-wrap{ height:420px; }
+      #productRankingChart{ height:340px!important; }
+      .collection-container{ height:360px; }
+      .bottom{ gap:20px; }
     }
   </style>
 </head>
@@ -188,18 +267,18 @@
           <div class="subtitle" id="subtitle">Sales evolution over the last 30 days</div>
         </div>
         <div class="controls" id="salesControls">
-          <button class="pill" data-days="7">7d</button>
-          <button class="pill active" data-days="30">30d</button>
-          <button class="pill" data-days="90">90d</button>
-          <button id="refreshBtn">↻ Refresh</button>
+          <button class="pill" data-days="7" aria-label="Últimos 7 dias">7d</button>
+          <button class="pill active" data-days="30" aria-label="Últimos 30 dias">30d</button>
+          <button class="pill" data-days="90" aria-label="Últimos 90 dias">90d</button>
+          <button id="refreshBtn" aria-label="Atualizar gráfico">↻ Refresh</button>
         </div>
       </div>
 
       <div class="chart-wrap">
-        <canvas id="salesChart"></canvas>
-        <div class="loading" id="loading">Loading data...</div>
-        <div class="empty hidden" id="empty">No data for selected period.</div>
-        <div class="error hidden" id="error">Error loading chart data.</div>
+        <canvas id="salesChart" aria-label="Vendas diárias" role="img"></canvas>
+        <div class="loading" id="loading" role="status" aria-live="polite">Loading data...</div>
+        <div class="empty hidden" id="empty" role="status" aria-live="polite">No data for selected period.</div>
+        <div class="error hidden" id="error" role="status" aria-live="polite">Error loading chart data.</div>
       </div>
     </section>
 
@@ -208,14 +287,14 @@
       <div class="panel">
         <h3>Product Ranking – Top Sellers</h3>
         <p class="muted">Top products by quantity sold</p>
-        <canvas id="productRankingChart"></canvas>
+        <canvas id="productRankingChart" aria-label="Ranking de produtos mais vendidos" role="img"></canvas>
       </div>
       <div class="panel">
         <h3>Products by Collection</h3>
         <p class="muted">Distribution of products by collection</p>
         <div class="collection-container">
           <div class="chart-container">
-            <canvas id="collectionChart"></canvas>
+            <div id="collectionChart" aria-label="Produtos por coleção" role="img"></div>
           </div>
           <div id="collectionLegend" class="legend-container"></div>
         </div>
@@ -227,6 +306,7 @@
   <script>
     /* ---------- SALES TREND (sem alterações) ---------- */
     const ctx = document.getElementById('salesChart').getContext('2d');
+    const isMobileQuery = window.matchMedia('(max-width: 767px)');
     const loadingEl = document.getElementById('loading');
     const emptyEl   = document.getElementById('empty');
     const errorEl   = document.getElementById('error');
@@ -281,6 +361,8 @@
       });
       const values = data.map(d=>d.revenue);
 
+      const tickSize = isMobileQuery.matches ? 10 : 12;
+      const maxTicks = isMobileQuery.matches ? 6 : 12;
       chart = new Chart(ctx, {
         type: 'line',
         data: {
@@ -317,9 +399,9 @@
             }
           },
           scales: {
-            x: { grid:{ display:false }, ticks:{ color:'#6b7280', font:{ size:12 } } },
+            x: { grid:{ display:false }, ticks:{ color:'#6b7280', font:{ size: tickSize }, maxTicksLimit: maxTicks } },
             y: { grid:{ color:'#f0f0f0' }, ticks:{
-              color:'#6b7280', font:{ size:12 },
+              color:'#6b7280', font:{ size: tickSize },
               callback:(v)=> Number(v).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})
             }}
           }
@@ -406,6 +488,7 @@
     function renderTopSellers(labels, values){
       const ctx2 = document.getElementById('productRankingChart').getContext('2d');
       if(productChart) productChart.destroy();
+      const tickSize2 = isMobileQuery.matches ? 10 : 12;
       productChart = new Chart(ctx2, {
         type:'bar',
         data:{ labels, datasets:[{ data:values, backgroundColor:'#8B5CF6', borderWidth:0, maxBarThickness:36 }] },
@@ -413,8 +496,8 @@
           responsive:true, maintainAspectRatio:false, animation:false,
           plugins:{ legend:{ display:false } },
           scales:{
-            x:{ ticks:{ color:'#6b7280', font:{ size:12 } }, grid:{ drawBorder:false, color:'rgba(0,0,0,.06)' } },
-            y:{ beginAtZero:true, ticks:{ color:'#6b7280', font:{ size:12 } }, grid:{ drawBorder:false, color:'rgba(0,0,0,.06)' } }
+            x:{ ticks:{ color:'#6b7280', font:{ size: tickSize2 } }, grid:{ drawBorder:false, color:'rgba(0,0,0,.06)' } },
+            y:{ beginAtZero:true, ticks:{ color:'#6b7280', font:{ size: tickSize2 } }, grid:{ drawBorder:false, color:'rgba(0,0,0,.06)' } }
           }
         }
       });
@@ -449,99 +532,72 @@
     }
 
     function renderCollections(labels, values){
-      const ctx3 = document.getElementById('collectionChart').getContext('2d');
-      if(collectionChart) collectionChart.destroy();
+      const el = document.getElementById('collectionChart');
+      if(collectionChart && collectionChart.dispose) collectionChart.dispose();
+
       const palette = ['#8B5CF6','#22C55E','#F59E0B','#60A5FA','#F472B6','#14B8A6','#F97316','#3B82F6','#EF4444','#10B981'];
-      const colors = labels.map((_,i)=>palette[i%palette.length]);
-      
-      // Limpar e preparar a legenda personalizada
-      const legendContainer = document.getElementById('collectionLegend');
-      legendContainer.innerHTML = '';
-      
-      collectionChart = new Chart(ctx3, {
-        type:'pie',
-        data:{ 
-          labels, 
-          datasets:[{ 
-            data:values, 
-            backgroundColor:colors, 
-            borderWidth:2,
-            borderColor:'#ffffff',
-            hoverBorderWidth:4,
-            hoverOffset:10
-          }] 
-        },
-        options:{
-          responsive:true,
-          maintainAspectRatio:true,
-          aspectRatio:1,
-          animation:{
-            animateRotate: true,
-            animateScale: true,
-            duration: 1200,
-            easing: 'easeOutCirc'
-          },
-          plugins:{ 
-            legend:{ 
-              display: false // Desativar legenda padrão do Chart.js
-            },
-            tooltip:{
-              callbacks:{
-                label:(ctx)=>`${ctx.label}: ${ctx.formattedValue} produtos`
-              },
-              backgroundColor:'#ffffff',
-              titleColor:'#111827',
-              bodyColor:'#111827',
-              borderColor:'#e5e7eb',
-              borderWidth:1,
-              padding:10,
-              displayColors:true,
-              boxPadding:4
-            }
+      const seriesData = labels.map((name, i)=>({ name, value: Number(values[i]||0) }));
+
+      const w = window.innerWidth;
+      const isMobile = w <= 767;
+      const isTablet = w >= 768 && w <= 1023;
+
+      const legendOpt = isMobile
+        ? { type: 'scroll', orient: 'horizontal', bottom: 0 }
+        : { type: 'scroll', orient: 'vertical', right: 10, top: 20, bottom: 20 };
+
+      const center = isMobile ? ['50%', '46%'] : ['40%', '50%'];
+      const radius = isMobile ? '60%' : (isTablet ? '55%' : '58%');
+
+      collectionChart = echarts.init(el);
+      const option = {
+        color: palette,
+        tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
+        legend: legendOpt,
+        series: [
+          {
+            name: 'Collections', type: 'pie', radius, center,
+            data: seriesData,
+            label: { show: false },
+            labelLine: { show: false },
+            emphasis: { itemStyle: { shadowBlur: 10, shadowOffsetX: 0, shadowColor: 'rgba(0,0,0,0.3)' } }
           }
-        }
-      });
-      
-      // Criar legenda personalizada em 2 colunas
-      colors.forEach((color, i) => {
-        if (i < labels.length) {
-          const item = document.createElement('div');
-          item.className = 'legend-item';
-          
-          const colorBox = document.createElement('span');
-          colorBox.className = 'legend-color';
-          colorBox.style.backgroundColor = color;
-          
-          const text = document.createElement('span');
-          text.textContent = `${labels[i]} (${values[i]})`;
-          
-          item.appendChild(colorBox);
-          item.appendChild(text);
-          legendContainer.appendChild(item);
-        }
-      });
-      
-      setTimeout(sendHeight,50);
+        ]
+      };
+      collectionChart.setOption(option);
+
+      setTimeout(()=>{ if(collectionChart && collectionChart.resize) collectionChart.resize(); sendHeight(); }, 50);
     }
 
+    let __collLabels = [], __collValues = [];
     async function loadCollections(){
       try{
         const recs = await fetchAllFromAirtable(COLLECTIONS_API);
         const { labels, values } = aggregateCollections(recs);
-        if(labels.length){ renderCollections(labels, values); }
-        else{ renderCollections(['Sem dados'], [1]); }
+        __collLabels = labels.length ? labels : ['Sem dados'];
+        __collValues = labels.length ? values : [1];
+        renderCollections(__collLabels, __collValues);
       }catch(e){
         console.warn('Collections error:', e);
-        renderCollections(['Sem dados'], [1]);
+        __collLabels = ['Sem dados'];
+        __collValues = [1];
+        renderCollections(__collLabels, __collValues);
       }
     }
+
+    // resize responsivo para ECharts: re-render com throttle ao cruzar breakpoints
+    let __collResizeTimer = null;
+    window.addEventListener('resize', ()=>{
+      if(__collResizeTimer) clearTimeout(__collResizeTimer);
+      __collResizeTimer = setTimeout(()=>{ renderCollections(__collLabels, __collValues); }, 200);
+    });
 
     /* ---------- INICIALIZAÇÃO ---------- */
     // inicia Sales Trend com 30d (como antes)
     load(30);
-    // carrega os novos gráficos inferiores
-    loadTopSellers();
-    loadCollections();
+    // carrega os novos gráficos inferiores de forma ociosa p/ conexões lentas
+    const idle = window.requestIdleCallback || ((fn)=>setTimeout(fn, 500));
+    idle(()=>{ loadTopSellers(); loadCollections(); });
   </script>
 </body>
 </html>
