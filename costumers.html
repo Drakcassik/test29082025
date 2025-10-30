@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Boketto – Customer Analytics</title>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
   <script>
     // Garante que tipos/escalas do Chart.js estão registrados
     if(window.Chart && Chart.register && Chart.registerables){
@@ -67,15 +67,18 @@
     .pill {
       border:none;
       border-radius:8px;
-      padding:6px 12px;
-      font-size:.85rem;
+      padding:10px 14px;
+      min-height:40px; /* tamanho de toque maior */
+      font-size:.95rem;
       cursor:pointer;
       background:#f3f4f6;
       color:#111827;
       transition:.15s;
+      touch-action: manipulation;
     }
     .pill:hover {background:#e5e7eb;}
     .pill.active {background:var(--accent);color:#fff;}
+    .pill:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
 
     /* Chart Wrappers */
     .chart-section {
@@ -106,6 +109,9 @@
       margin:0 auto;
     }
 
+    /* Doughnut charts em proporção 1:1 no CSS */
+    #marketingChart, #emailChart { height:auto !important; aspect-ratio: 1 / 1; }
+
     .charts-grid {
       display:grid;
       grid-template-columns: 1.6fr 1fr;
@@ -113,8 +119,13 @@
       align-items:stretch;
     }
 
+    /* Grid especial para dois doughnuts lado a lado */
+    .charts-grid-duo { grid-template-columns: 1.6fr 1fr; }
+
     @media (max-width: 900px) {
       .charts-grid {grid-template-columns: 1fr;}
+      /* Mobile: empilhar os dois doughnuts (um abaixo do outro) */
+      .charts-grid-duo { grid-template-columns: 1fr; gap:12px; }
       canvas {height:clamp(240px,40vh,360px) !important;}
     }
 
@@ -131,10 +142,41 @@
       }
       .chart-section { padding:16px 16px; }
       .charts-grid { gap:16px; }
+      .charts-grid-duo { grid-template-columns: 1fr; gap:12px; }
       .title { font-size:1rem; }
       .subtitle { font-size:.8rem; }
       /* Aumenta ainda mais a altura dos gráficos em telas muito pequenas */
-      canvas { height:clamp(280px,46vh,420px) !important; }
+      canvas { height:clamp(260px,46vh,420px) !important; }
+      #marketingChart, #emailChart { height:auto !important; }
+    }
+
+    /* Tablet: 2 colunas para os dois últimos gráficos (apenas no tablet) */
+    @media (min-width: 768px) and (max-width: 1023px) {
+      .charts-grid-duo { grid-template-columns: 1fr 1fr; gap:16px; }
+    }
+
+    /* Mobile pequeno */
+    @media (max-width: 480px) {
+      .cards { gap:12px; }
+      .chart-section { padding:14px; }
+      .charts-grid-duo { grid-template-columns: 1fr; gap:10px; }
+      canvas { height:clamp(230px,48vh,400px) !important; }
+      #marketingChart, #emailChart { height:auto !important; }
+    }
+
+    /* Landscape em mobile: altura menor para caber acima do teclado/nav */
+    @media (orientation: landscape) and (max-width: 768px) {
+      canvas { height:clamp(200px,40vh,320px) !important; }
+    }
+
+    /* Desktop: limitar largura dos doughnuts para manter proporção e tamanho similar */
+    @media (min-width: 901px) {
+      #marketingChart, #emailChart {
+        width: min(100%, 360px);
+        height: auto !important;
+        aspect-ratio: 1 / 1;
+        margin: 0 auto; /* centraliza dentro do card */
+      }
     }
   </style>
 </head>
@@ -166,10 +208,10 @@
 
     <!-- Period Controls -->
     <div class="controls">
-      <button class="pill" data-days="7">7d</button>
-      <button class="pill active" data-days="30">30d</button>
-      <button class="pill" data-days="90">90d</button>
-      <button id="refreshBtn" class="pill">↻ Refresh</button>
+      <button class="pill" data-days="7" aria-label="Últimos 7 dias">7d</button>
+      <button class="pill active" data-days="30" aria-label="Últimos 30 dias">30d</button>
+      <button class="pill" data-days="90" aria-label="Últimos 90 dias">90d</button>
+      <button id="refreshBtn" class="pill" aria-label="Atualizar dados">↻ Refresh</button>
     </div>
 
     <!-- Customer Growth -->
@@ -180,7 +222,7 @@
           <div class="subtitle">Evolution of new customers in selected period</div>
         </div>
       </div>
-      <canvas id="growthChart"></canvas>
+      <canvas id="growthChart" aria-label="Crescimento de clientes ao longo do tempo" role="img"></canvas>
     </section>
 
     <!-- NEW CHARTS GRID -->
@@ -192,7 +234,7 @@
             <div class="subtitle">Based on “Total Spent” field</div>
           </div>
         </div>
-        <canvas id="topCustomersChart"></canvas>
+        <canvas id="topCustomersChart" aria-label="Top clientes por gasto" role="img"></canvas>
       </div>
 
       <div class="chart-section">
@@ -202,11 +244,11 @@
             <div class="subtitle">Distribution across regions</div>
           </div>
         </div>
-        <canvas id="countryChart"></canvas>
+        <canvas id="countryChart" aria-label="Clientes por país" role="img"></canvas>
       </div>
     </section>
 
-    <section class="charts-grid">
+    <section class="charts-grid charts-grid-duo">
       <div class="chart-section">
         <div class="chart-header">
           <div>
@@ -214,7 +256,7 @@
             <div class="subtitle">Customers who accept marketing</div>
           </div>
         </div>
-        <canvas id="marketingChart"></canvas>
+        <canvas id="marketingChart" aria-label="Aceitam marketing" role="img"></canvas>
       </div>
 
       <div class="chart-section">
@@ -224,7 +266,7 @@
             <div class="subtitle">Verification status</div>
           </div>
         </div>
-        <canvas id="emailChart"></canvas>
+        <canvas id="emailChart" aria-label="Email verificado" role="img"></canvas>
       </div>
     </section>
   </div>
@@ -295,7 +337,8 @@
 
       const options = {
         responsive: true,
-        maintainAspectRatio: false,
+        maintainAspectRatio: (type==='doughnut' || type==='pie') ? true : false,
+        aspectRatio: (type==='doughnut' || type==='pie') ? 1 : undefined,
         indexAxis: useHorizontalBars ? 'y' : 'x',
         plugins: {
           legend: {
@@ -380,7 +423,37 @@
       }
       const labels = Object.keys(growth).sort();
       const values = labels.map(k=>growth[k]);
+      // Render primário: crescimento
       renderChart('growthChart','line',labels,values,['#8B5CF6']);
+
+      // Render secundário (ocioso) para conexões lentas
+      const idle = window.requestIdleCallback || ((fn)=>setTimeout(fn, 300));
+      idle(()=>{
+        // Top Customers by Total Spent
+        const top = periodData
+          .filter(r => r.fields && Object.prototype.hasOwnProperty.call(r.fields,'Total Spent'))
+          .sort((a,b)=> (b.fields['Total Spent']||0) - (a.fields['Total Spent']||0))
+          .slice(0,10);
+        renderChart(
+          'topCustomersChart',
+          'bar',
+          top.map(r=> r.fields['Name'] || r.fields['Email'] || r.id || 'Sem nome'),
+          top.map(r=> Number(r.fields['Total Spent']||0)),
+          ['#8B5CF6']
+        );
+
+        // Customers by Country no período
+        const byCountry = groupBy(periodData,'Country');
+        renderChart('countryChart','bar',Object.keys(byCountry),Object.values(byCountry),['#22C55E']);
+
+        // Marketing Opt-In no período
+        const marketing = groupBy(periodData,'Accepts Marketing');
+        renderChart('marketingChart','doughnut',Object.keys(marketing),Object.values(marketing),['#8B5CF6','#E5E7EB']);
+
+        // Email Verified no período
+        const verified = groupBy(periodData,'Email Verified');
+        renderChart('emailChart','doughnut',Object.keys(verified),Object.values(verified),['#22C55E','#E5E7EB']);
+      });
 
       // Top Customers by Total Spent no período (inclui valores zero)
       const top = periodData
@@ -452,8 +525,18 @@
       }, 200);
     });
 
-    setupControls();
-    loadData();
+    // Garante que o Chart.js (defer) já executou antes de iniciar
+    document.addEventListener('DOMContentLoaded', () => {
+      try{
+        if(window.Chart && Chart.register && Chart.registerables){
+          Chart.register(...Chart.registerables);
+        }
+      }catch(e){
+        console.warn('Chart.js register falhou (seguindo sem registrar):', e);
+      }
+      setupControls();
+      loadData();
+    });
   </script>
 </body>
 </html>
