@@ -224,12 +224,17 @@
       .subtitle{ font-size:.95rem; }
       .panel{ padding:24px 26px; }
       .panel h3{ font-size:1.1rem; }
-      .panel p.muted{ font-size:.95rem; }
-      .chart-wrap{ height:420px; }
-      #productRankingChart{ height:340px!important; }
-      .collection-container{ height:360px; }
-      .bottom{ gap:20px; }
-    }
+    .panel p.muted{ font-size:.95rem; }
+    .chart-wrap{ height:420px; }
+    #productRankingChart{ height:340px!important; }
+    .collection-container{ height:360px; }
+    .bottom{ gap:20px; }
+  }
+  /* KPI details and delta colors */
+  .kpi-secondary{ margin-top:6px; font-size:.85rem; color:#9ca3af; line-height:1.35; }
+  .delta-up{ color:#22c55e; }
+  .delta-down{ color:#f87171; }
+  .delta-flat{ color:#9ca3af; }
   </style>
 </head>
 <body>
@@ -239,23 +244,31 @@
     <section class="cards">
       <div class="card">
         <p class="kpi-title">Total Sales</p>
-        <p class="kpi-value">R$ 2.300,00</p>
-        <p class="kpi-sub">↑ 11 orders in period</p>
+        <p class="kpi-value" id="kpi-total">R$ 2.300,00</p>
+        <p class="kpi-value" id="kpi-total-sales-value" style="display:none"></p>
+        <p class="kpi-sub" id="kpi-total-sub">↑ 11 orders in period</p>
+        <div class="kpi-secondary" id="kpi-total-sales-details"></div>
       </div>
       <div class="card">
         <p class="kpi-title">Average Order Value</p>
-        <p class="kpi-value">R$ 209,09</p>
-        <p class="kpi-sub">↑ Based on 11 transactions</p>
+        <p class="kpi-value" id="kpi-aov">R$ 209,09</p>
+        <p class="kpi-value" id="kpi-aov-value" style="display:none"></p>
+        <p class="kpi-sub" id="kpi-aov-sub">↑ Based on 11 transactions</p>
+        <div class="kpi-secondary" id="kpi-aov-details"></div>
       </div>
       <div class="card">
         <p class="kpi-title">Number of Transactions</p>
-        <p class="kpi-value">11</p>
-        <p class="kpi-sub">↑ From 2025-09-15 to 2025-10-15</p>
+        <p class="kpi-value" id="kpi-transactions">11</p>
+        <p class="kpi-value" id="kpi-tx-orders" style="display:none"></p>
+        <p class="kpi-sub" id="kpi-transactions-sub">↑ From 2025-09-15 to 2025-10-15</p>
+        <div class="kpi-secondary" id="kpi-tx-details"></div>
       </div>
       <div class="card">
         <p class="kpi-title">Gross Margin</p>
-        <p class="kpi-value">100.0%</p>
+        <p class="kpi-value" id="kpi-margin">100.0%</p>
+        <p class="kpi-value" id="kpi-gm-value" style="display:none"></p>
         <p class="kpi-sub" style="color:#9ca3af">No COGS data available</p>
+        <div class="kpi-secondary" id="kpi-gm-details"></div>
       </div>
     </section>
 
@@ -287,14 +300,14 @@
       <div class="panel">
         <h3>Product Ranking – Top Sellers</h3>
         <p class="muted">Top products by quantity sold</p>
-        <canvas id="productRankingChart" aria-label="Ranking de produtos mais vendidos" role="img"></canvas>
+        <div id="productRankingChart" aria-label="Ranking de produtos mais vendidos" role="img" style="width:100%;height:100%;"></div>
       </div>
       <div class="panel">
-        <h3>Products by Collection</h3>
-        <p class="muted">Distribution of products by collection</p>
+  <h3>Product by collection and tags</h3>
+  <p class="muted">Outer: collections • Inner: tags</p>
         <div class="collection-container">
           <div class="chart-container">
-            <div id="collectionChart" aria-label="Produtos por coleção" role="img"></div>
+  <div id="collectionChart" aria-label="Produtos por coleção e tags" role="img"></div>
           </div>
           <div id="collectionLegend" class="legend-container"></div>
         </div>
@@ -302,302 +315,638 @@
     </section>
   </div>
 
-  <!-- JS (KPI + Sales Trend intactos; só trocamos os 2 gráficos de baixo) -->
-  <script>
-    /* ---------- SALES TREND (sem alterações) ---------- */
-    const ctx = document.getElementById('salesChart').getContext('2d');
-    const isMobileQuery = window.matchMedia('(max-width: 767px)');
-    const loadingEl = document.getElementById('loading');
-    const emptyEl   = document.getElementById('empty');
-    const errorEl   = document.getElementById('error');
-    const subtitleEl= document.getElementById('subtitle');
-    const pills = Array.from(document.querySelectorAll('#salesControls .pill'));
-    const refreshBtn = document.getElementById('refreshBtn');
+<script>
+  /* ---------- SALES TREND (Shopify) ---------- */
+  const ctx = document.getElementById('salesChart').getContext('2d');
+  const isMobileQuery = window.matchMedia('(max-width: 767px)');
+  const loadingEl = document.getElementById('loading');
+  const emptyEl   = document.getElementById('empty');
+  const errorEl   = document.getElementById('error');
+  const subtitleEl= document.getElementById('subtitle');
+  const pills = Array.from(document.querySelectorAll('#salesControls .pill'));
+  const refreshBtn = document.getElementById('refreshBtn');
 
-    const API_BASE = 'https://boketto-api-proxy.contatolucasmartins.workers.dev';
-    const mainUrl = (days)=> `${API_BASE}/analytics/sales-trend?days=${days}&metric=gross`;
-    const fallbackUrl = (days)=> `${API_BASE}/analytics/sales-trend-fallback?days=${days}&status=paid`;
+  const SALES_TREND_BASE = 'https://04-shopify-chart-sales-trend.lucas-def.workers.dev';
 
-    let currentDays = 30;
-    let chart;
-
-    function show(state){
-      loadingEl.classList.toggle('hidden', state!=='loading');
-      emptyEl.classList.toggle('hidden',   state!=='empty');
-      errorEl.classList.toggle('hidden',   state!=='error');
+  function getSalesTrendUrl(days){
+    switch(days){
+      case 7:  return `${SALES_TREND_BASE}/salestrend7days`;
+      case 30: return `${SALES_TREND_BASE}/salestrend30days`;
+      case 90: return `${SALES_TREND_BASE}/salestrend90days`;
+      default: return `${SALES_TREND_BASE}/salestrendany`;
     }
+  }
 
-    async function fetchPoints(days){
-      try{
-        const r = await fetch(mainUrl(days), { cache: 'no-store' });
-        if(!r.ok) throw new Error('HTTP '+r.status);
-        const j = await r.json();
-        if(j && Array.isArray(j.points)) return j.points;
-      }catch(e){
-        console.warn('Main API falhou:', e);
-      }
-      try{
-        const r2 = await fetch(fallbackUrl(days), { cache: 'no-store' });
-        if(!r2.ok) throw new Error('HTTP '+r2.status);
-        const j2 = await r2.json();
-        if(j2 && Array.isArray(j2.points)) return j2.points;
-      }catch(e2){
-        console.warn('Fallback API falhou:', e2);
-      }
+  let currentDays = 30;
+  let chart = null;
+
+  function show(state){
+    loadingEl.classList.toggle('hidden', state!=='loading');
+    emptyEl.classList.toggle('hidden',   state!=='empty');
+    errorEl.classList.toggle('hidden',   state!=='error');
+  }
+
+  async function fetchPoints(days){
+    try{
+      const url = getSalesTrendUrl(days);
+      const res = await fetch(url, { cache: 'no-store' });
+      if(!res.ok) throw new Error('HTTP '+res.status);
+      const j = await res.json();
+      // Shopify sales trend → usa "trend_data"
+      if(j && Array.isArray(j.trend_data)) return j.trend_data;
+      return [];
+    }catch(e){
+      console.warn('Sales trend error:', e);
       return null;
     }
+  }
 
-    function renderChart(points){
-      if(chart) chart.destroy();
+  function renderChart(points){
+    if(chart) chart.destroy();
 
-      const data = (points||[]).map(p=>({
-        date: p.date,
-        revenue: Number(p.revenue)||0
-      }));
+    const data = (points||[]).map(p=>({
+      date: p.date,
+      revenue: Number(
+        p.total_sales ?? p.revenue ?? p.gross ?? p.total ?? p.amount ?? p.value ?? 0
+      ) || 0
+    }));
 
-      const labels = data.map(d=>{
-        const dt = new Date(d.date);
-        return `${String(dt.getDate()).padStart(2,'0')}/${String(dt.getMonth()+1).padStart(2,'0')}`;
-      });
-      const values = data.map(d=>d.revenue);
+    const labels = data.map(d=>{
+      const dt = new Date(d.date);
+      if(Number.isNaN(dt.getTime())) return d.date;
+      return `${String(dt.getDate()).padStart(2,'0')}/${String(dt.getMonth()+1).padStart(2,'0')}`;
+    });
+    const values = data.map(d=>d.revenue);
 
-      const tickSize = isMobileQuery.matches ? 10 : 12;
-      const maxTicks = isMobileQuery.matches ? 6 : 12;
-      chart = new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels,
-          datasets: [{
-            label: 'Total Sales',
-            data: values,
-            borderColor: '#8B5CF6',
-            borderWidth: 2,
-            tension: 0.35,
-            pointRadius: 2.5,
-            pointBackgroundColor: '#8B5CF6',
-            fill: true,
-            backgroundColor: (c)=>{
-              const g = c.chart.ctx.createLinearGradient(0,0,0,300);
-              g.addColorStop(0,'rgba(139,92,246,0.25)');
-              g.addColorStop(1,'rgba(139,92,246,0)');
-              return g;
+    const tickSize = isMobileQuery.matches ? 10 : 12;
+    const maxTicks = isMobileQuery.matches ? 6 : 12;
+    chart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Total Sales',
+          data: values,
+          borderColor: '#8B5CF6',
+          borderWidth: 2,
+          tension: 0.35,
+          pointRadius: 2.5,
+          pointBackgroundColor: '#8B5CF6',
+          fill: true,
+          backgroundColor: (c)=>{
+            const g = c.chart.ctx.createLinearGradient(0,0,0,300);
+            g.addColorStop(0,'rgba(139,92,246,0.25)');
+            g.addColorStop(1,'rgba(139,92,246,0)');
+            return g;
+          }
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display:false },
+          tooltip: {
+            backgroundColor:'#fff', titleColor:'#111827', bodyColor:'#111827',
+            borderColor:'#e5e7eb', borderWidth:1, padding:10, displayColors:false,
+            callbacks: {
+              label: (ctx)=> ' '+Number(ctx.parsed.y).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}),
+              title: (items)=> 'Date: '+items[0].label
             }
-          }]
+          }
         },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            legend: { display:false },
-            tooltip: {
-              backgroundColor:'#fff', titleColor:'#111827', bodyColor:'#111827',
-              borderColor:'#e5e7eb', borderWidth:1, padding:10, displayColors:false,
-              callbacks: {
-                label: (ctx)=> ' '+Number(ctx.parsed.y).toLocaleString('pt-BR',{style:'currency',currency:'BRL'}),
-                title: (items)=> 'Date: '+items[0].label
-              }
-            }
+        scales: {
+          x: {
+            grid:{ display:false },
+            ticks:{ color:'#6b7280', font:{ size: tickSize }, maxTicksLimit: maxTicks }
           },
-          scales: {
-            x: { grid:{ display:false }, ticks:{ color:'#6b7280', font:{ size: tickSize }, maxTicksLimit: maxTicks } },
-            y: { grid:{ color:'#f0f0f0' }, ticks:{
+          y: {
+            grid:{ color:'#f0f0f0' },
+            ticks:{
               color:'#6b7280', font:{ size: tickSize },
               callback:(v)=> Number(v).toLocaleString('pt-BR',{style:'currency',currency:'BRL'})
-            }}
+            }
           }
         }
-      });
-
-      setTimeout(sendHeight, 50);
-    }
-
-    async function load(days){
-      currentDays = days;
-      pills.forEach(p=>p.classList.toggle('active', Number(p.dataset.days)===days));
-      subtitleEl.textContent = `Sales evolution over the last ${days} days`;
-
-      show('loading');
-      const points = await fetchPoints(days);
-      if(points === null){ show('error'); sendHeight(); return; }
-      if(!points.length){ show('empty'); renderChart([]); return; }
-      show('');
-      renderChart(points);
-    }
-
-    pills.forEach(p=>p.addEventListener('click', ()=>load(Number(p.dataset.days))));
-    refreshBtn.addEventListener('click', ()=>load(currentDays));
-
-    /* ---------- AUTO HEIGHT (sem alterações) ---------- */
-    let __lastHeight = 0;
-    let __heightTimer = null;
-    function sendHeight(){
-      if(__heightTimer) return; // throttle
-      __heightTimer = setTimeout(()=>{
-        __heightTimer = null;
-        const h = Math.ceil(document.documentElement.scrollHeight);
-        if(Math.abs(h - __lastHeight) > 2){
-          __lastHeight = h;
-          window.parent.postMessage({ iframeHeight: h }, '*');
-        }
-      }, 120);
-    }
-    window.addEventListener('load', sendHeight);
-    window.addEventListener('resize', sendHeight);
-    const mo = new MutationObserver(()=>sendHeight());
-    mo.observe(document.body, { childList:true, subtree:true });
-
-    /* =====================================================
-       NOVOS GRÁFICOS (Somente esta seção foi alterada)
-       Esquerda: Top Sellers (barra)
-       Direita:  Produtos por Coleção (pizza)
-       ===================================================== */
-
-    // ENDPOINTS SOLICITADOS
-    const TOP_SELLERS_API   = 'https://airtablebokettostore.contatolucasmartins.workers.dev/airtable/tblQNdIDlFW4UBmzW';
-    const COLLECTIONS_API   = 'https://airtablebokettostore.contatolucasmartins.workers.dev/airtable/tbl71ryDS2C7EtPJL';
-
-    let productChart, collectionChart;
-
-    /* ---------- TOP SELLERS (BARRAS) ---------- */
-    async function fetchAllFromAirtable(url){
-      let all = [], offset = null;
-      do{
-        const full = offset ? `${url}?offset=${encodeURIComponent(offset)}` : url;
-        const res = await fetch(full, { cache:'no-store' });
-        const json = await res.json();
-        if(json && Array.isArray(json.records)) all = all.concat(json.records);
-        offset = json.offset;
-      }while(offset);
-      return all;
-    }
-
-    function aggregateTopSellers(records){
-      const map = {};
-      records.forEach(r=>{
-        const f = r.fields || {};
-        const name = f['Product'] || f['Name'] || f['Title'] || 'Unnamed';
-        const qty  = Number(
-          f['Quantity'] ?? f['Qty'] ?? f['quantity'] ?? 1
-        );
-        map[name] = (map[name]||0) + (Number.isFinite(qty) ? qty : 1);
-      });
-      const sorted = Object.entries(map).sort((a,b)=>b[1]-a[1]).slice(0,10);
-      return { labels: sorted.map(([n])=>n), values: sorted.map(([,v])=>v) };
-    }
-
-    function renderTopSellers(labels, values){
-      const ctx2 = document.getElementById('productRankingChart').getContext('2d');
-      if(productChart) productChart.destroy();
-      const tickSize2 = isMobileQuery.matches ? 10 : 12;
-      productChart = new Chart(ctx2, {
-        type:'bar',
-        data:{ labels, datasets:[{ data:values, backgroundColor:'#8B5CF6', borderWidth:0, maxBarThickness:36 }] },
-        options:{
-          responsive:true, maintainAspectRatio:false, animation:false,
-          plugins:{ legend:{ display:false } },
-          scales:{
-            x:{ ticks:{ color:'#6b7280', font:{ size: tickSize2 } }, grid:{ drawBorder:false, color:'rgba(0,0,0,.06)' } },
-            y:{ beginAtZero:true, ticks:{ color:'#6b7280', font:{ size: tickSize2 } }, grid:{ drawBorder:false, color:'rgba(0,0,0,.06)' } }
-          }
-        }
-      });
-      setTimeout(sendHeight,50);
-    }
-
-    async function loadTopSellers(){
-      try{
-        const recs = await fetchAllFromAirtable(TOP_SELLERS_API);
-        const { labels, values } = aggregateTopSellers(recs);
-        if(labels.length){ renderTopSellers(labels, values); }
-        else{ renderTopSellers(['No data'], [0]); }
-      }catch(e){
-        console.warn('Top Sellers error:', e);
-        renderTopSellers(['No data'], [0]);
       }
-    }
-
-    /* ---------- PRODUTOS POR COLEÇÃO (PIZZA) ---------- */
-    function aggregateCollections(records){
-      const map = {};
-      records.forEach(r=>{
-        const f = r.fields || {};
-        // Usar o campo Title da tabela de coleções
-        const title = f["Title"] || "Sem título";
-        // Usar o campo Products para contar quantos produtos tem em cada coleção
-        const prods = f["Products"];
-        const count = Array.isArray(prods) ? prods.length : (prods ? 1 : 0);
-        map[title] = count;
-      });
-      return { labels:Object.keys(map), values:Object.values(map) };
-    }
-
-    function renderCollections(labels, values){
-      const el = document.getElementById('collectionChart');
-      if(collectionChart && collectionChart.dispose) collectionChart.dispose();
-
-      const palette = ['#8B5CF6','#22C55E','#F59E0B','#60A5FA','#F472B6','#14B8A6','#F97316','#3B82F6','#EF4444','#10B981'];
-      const seriesData = labels.map((name, i)=>({ name, value: Number(values[i]||0) }));
-
-      const w = window.innerWidth;
-      const isMobile = w <= 767;
-      const isTablet = w >= 768 && w <= 1023;
-
-      const legendOpt = isMobile
-        ? { type: 'scroll', orient: 'horizontal', bottom: 0 }
-        : { type: 'scroll', orient: 'vertical', right: 10, top: 20, bottom: 20 };
-
-      const center = isMobile ? ['50%', '46%'] : ['40%', '50%'];
-      const radius = isMobile ? '60%' : (isTablet ? '55%' : '58%');
-
-      collectionChart = echarts.init(el);
-      const option = {
-        color: palette,
-        tooltip: { trigger: 'item', formatter: '{b}: {c} ({d}%)' },
-        legend: legendOpt,
-        series: [
-          {
-            name: 'Collections', type: 'pie', radius, center,
-            data: seriesData,
-            label: { show: false },
-            labelLine: { show: false },
-            emphasis: { itemStyle: { shadowBlur: 10, shadowOffsetX: 0, shadowColor: 'rgba(0,0,0,0.3)' } }
-          }
-        ]
-      };
-      collectionChart.setOption(option);
-
-      setTimeout(()=>{ if(collectionChart && collectionChart.resize) collectionChart.resize(); sendHeight(); }, 50);
-    }
-
-    let __collLabels = [], __collValues = [];
-    async function loadCollections(){
-      try{
-        const recs = await fetchAllFromAirtable(COLLECTIONS_API);
-        const { labels, values } = aggregateCollections(recs);
-        __collLabels = labels.length ? labels : ['Sem dados'];
-        __collValues = labels.length ? values : [1];
-        renderCollections(__collLabels, __collValues);
-      }catch(e){
-        console.warn('Collections error:', e);
-        __collLabels = ['Sem dados'];
-        __collValues = [1];
-        renderCollections(__collLabels, __collValues);
-      }
-    }
-
-    // resize responsivo para ECharts: re-render com throttle ao cruzar breakpoints
-    let __collResizeTimer = null;
-    window.addEventListener('resize', ()=>{
-      if(__collResizeTimer) clearTimeout(__collResizeTimer);
-      __collResizeTimer = setTimeout(()=>{ renderCollections(__collLabels, __collValues); }, 200);
     });
 
-    /* ---------- INICIALIZAÇÃO ---------- */
-    // inicia Sales Trend com 30d (como antes)
+    setTimeout(sendHeight, 50);
+  }
+
+  async function load(days){
+    currentDays = days;
+    pills.forEach(p=>p.classList.toggle('active', Number(p.dataset.days)===days));
+    subtitleEl.textContent = `Sales evolution over the last ${days} days`;
+
+    show('loading');
+    const points = await fetchPoints(days);
+    if(points === null){ show('error'); sendHeight(); return; }
+    if(!points.length){ show('empty'); renderChart([]); return; }
+    show('');
+    renderChart(points);
+
+    // KPIs agora puxam dos endpoints Shopify
+    if(typeof loadKpis === 'function'){
+      loadKpis(days);
+    }
+  }
+
+  pills.forEach(p=>p.addEventListener('click', ()=>{
+    const d = Number(p.dataset.days);
+    load(d);
+    loadTopSellers(d);
+  }));
+  refreshBtn.addEventListener('click', ()=>load(currentDays));
+
+  /* ---------- AUTO HEIGHT (mesmo comportamento) ---------- */
+  let __lastHeight = 0;
+  let __heightTimer = null;
+  function sendHeight(){
+    if(__heightTimer) return; // throttle
+    __heightTimer = setTimeout(()=>{
+      __heightTimer = null;
+      const h = Math.ceil(document.documentElement.scrollHeight);
+      if(Math.abs(h - __lastHeight) > 2){
+        __lastHeight = h;
+        window.parent.postMessage({ iframeHeight: h }, '*');
+      }
+    }, 120);
+  }
+  window.addEventListener('load', sendHeight);
+  window.addEventListener('resize', sendHeight);
+  const mo = new MutationObserver(()=>sendHeight());
+  mo.observe(document.body, { childList:true, subtree:true });
+
+  /* ======================================================
+     BOTTOM: TOP SELLERS + PRODUCTS BY COLLECTION
+     Agora usando endpoints Shopify, mantendo layout
+     ====================================================== */
+
+  const TOP_SELLERS_BASE   = 'https://06-shopify-top-sellers.lucas-def.workers.dev';
+  const COLLECTIONS_BASE   = 'https://05-shopify-products-by-collection.lucas-def.workers.dev';
+
+  let productChart = null;
+  let collectionChart = null;
+
+  function getTopSellersUrl(days){
+    switch(days){
+      case 7:  return `${TOP_SELLERS_BASE}/topsellers7days`;
+      case 30: return `${TOP_SELLERS_BASE}/topsellers`;       // assumindo range padrão = 30d
+      case 90: return `${TOP_SELLERS_BASE}/topsellers90days`;
+      default: return `${TOP_SELLERS_BASE}/topsellersany`;
+    }
+  }
+
+  function renderTopSellers(labels, values){
+    const el = document.getElementById('productRankingChart');
+    if(productChart && productChart.dispose) productChart.dispose();
+    productChart = echarts.init(el);
+    const option = {
+      tooltip: {
+        trigger: 'axis',
+        axisPointer: { type: 'shadow' }
+      },
+      grid: { left: '3%', right: '4%', bottom: '12%', containLabel: true },
+      xAxis: [{
+        type: 'category',
+        data: labels,
+        axisTick: { alignWithLabel: true },
+        axisLabel: {
+          interval: 0,
+          rotate: 28,
+          color: '#9ca3af',
+          // width + overflow help show full names by wrapping when long
+          width: 160,
+          overflow: 'break',
+          formatter: function(value){ return String(value); }
+        }
+      }],
+      yAxis: [{ type: 'value' }],
+      series: [{
+        name: 'Top Sellers',
+        type: 'bar',
+        barWidth: '60%',
+        data: values,
+        itemStyle: { color: '#8B5CF6' }
+      }]
+    };
+    productChart.setOption(option);
+    setTimeout(()=>{ if(productChart && productChart.resize) productChart.resize(); sendHeight(); }, 50);
+  }
+
+  async function loadTopSellers(days){
+    try{
+      const url = getTopSellersUrl(days||30);
+      const res = await fetch(url, { cache:'no-store' });
+      if(!res.ok) throw new Error('HTTP '+res.status);
+      const json = await res.json();
+      const list = Array.isArray(json.top_sellers) ? json.top_sellers : [];
+      if(!list.length){
+        renderTopSellers(['No data'], [0]);
+        return;
+      }
+      const labels = list.map(item=>item.product || item.name || 'Unnamed');
+      const values = list.map(item=>Number(item.quantity ?? item.qty ?? 0) || 0);
+      renderTopSellers(labels, values);
+    }catch(e){
+      console.warn('Top Sellers error:', e);
+      renderTopSellers(['No data'], [0]);
+    }
+  }
+
+  // Re-render Top Sellers on resize (throttled)
+  let __topResizeTimer = null;
+  window.addEventListener('resize', ()=>{
+    if(__topResizeTimer) clearTimeout(__topResizeTimer);
+    __topResizeTimer = setTimeout(()=>{
+      if(productChart && productChart.resize) productChart.resize();
+    }, 200);
+  });
+
+  /* ---------- PRODUCTS BY COLLECTION AND TAGS (dual pie ECharts) ---------- */
+  let __collLabels = [];
+  let __collValues = [];
+  let __tagLabels = [];
+  let __tagValues = [];
+
+  function renderCollections(collLabels, collValues, tagLabels, tagValues){
+    const el = document.getElementById('collectionChart');
+    if(collectionChart && collectionChart.dispose) collectionChart.dispose();
+
+    const palette = ['#8B5CF6','#22C55E','#F59E0B','#60A5FA','#F472B6','#14B8A6','#F97316','#3B82F6','#EF4444','#10B981'];
+    const outerData = (collLabels||[]).map((name, i)=>({ name, value: Number((collValues||[])[i]||0) }));
+    const innerData = (tagLabels||[]).map((name, i)=>({ name, value: Number((tagValues||[])[i]||0) }));
+
+    const w = window.innerWidth;
+    const isMobile = w <= 767;
+    const isTablet = w >= 768 && w <= 1023;
+
+    const legendData = Array.from(new Set([...(tagLabels||[]), ...(collLabels||[])]));
+    const legendOpt = isMobile
+      ? { type: 'scroll', orient: 'horizontal', bottom: 0, data: legendData }
+      : { type: 'scroll', orient: 'vertical', right: 60, top: 20, bottom: 20, data: legendData };
+
+    const center = isMobile ? ['50%', '46%'] : ['40%', '50%'];
+    const innerRadiusMax = isMobile ? '28%' : (isTablet ? '28%' : '30%');
+    const outerRadiusMin = isMobile ? '42%' : '45%';
+    const outerRadiusMax = isMobile ? '58%' : (isTablet ? '58%' : '60%');
+
+    collectionChart = echarts.init(el);
+    const option = {
+      color: palette,
+      tooltip: { trigger: 'item', formatter: '{a} <br/>{b}: {c} ({d}%)' },
+      legend: legendOpt,
+      series: [
+        {
+          name: 'Tags',
+          type: 'pie',
+          selectedMode: 'single',
+          radius: [0, innerRadiusMax],
+          center,
+          label: { position: 'inner', fontSize: 12 },
+          labelLine: { show: false },
+          data: innerData
+        },
+        {
+          name: 'Collections',
+          type: 'pie',
+          radius: [outerRadiusMin, outerRadiusMax],
+          center,
+          labelLine: { length: 30 },
+          label: {
+            formatter: '{a|{a}}{abg|}\n{hr|}\n  {b|{b}：}{c}  {per|{d}%}  ',
+            backgroundColor: '#F6F8FC',
+            borderColor: '#8C8D8E',
+            borderWidth: 1,
+            borderRadius: 4,
+            rich: {
+              a: { color: '#6E7079', lineHeight: 22, align: 'center' },
+              hr: { borderColor: '#8C8D8E', width: '100%', borderWidth: 1, height: 0 },
+              b: { color: '#4C5058', fontSize: 14, fontWeight: 'bold', lineHeight: 33 },
+              per: { color: '#fff', backgroundColor: '#4C5058', padding: [3,4], borderRadius: 4 }
+            }
+          },
+          data: outerData,
+          emphasis: {
+            itemStyle: { shadowBlur: 10, shadowOffsetX: 0, shadowColor: 'rgba(0,0,0,0.3)' }
+          }
+        }
+      ]
+    };
+    collectionChart.setOption(option);
+
+    setTimeout(()=>{
+      if(collectionChart && collectionChart.resize) collectionChart.resize();
+      sendHeight();
+    }, 50);
+  }
+
+  async function loadCollections(){
+    try{
+      const collUrl = `${COLLECTIONS_BASE}/productsbycollectionany`;
+      const tagUrl  = `${COLLECTIONS_BASE}/productsbytagany`;
+      const [collRes, tagRes] = await Promise.all([
+        fetch(collUrl, { cache:'no-store' }),
+        fetch(tagUrl,  { cache:'no-store' })
+      ]);
+      if(!collRes.ok) throw new Error('Collections HTTP '+collRes.status);
+      if(!tagRes.ok)  throw new Error('Tags HTTP '+tagRes.status);
+      const collJson = await collRes.json();
+      const tagJson  = await tagRes.json();
+      const collDist = Array.isArray(collJson.distribution) ? collJson.distribution : [];
+      const tagDist  = Array.isArray(tagJson.distribution)  ? tagJson.distribution  : [];
+
+      if(!collDist.length){
+        __collLabels = ['No data'];
+        __collValues = [1];
+      }else{
+        __collLabels = collDist.map(item=>item.collection || item.name || 'Uncategorized');
+        __collValues = collDist.map(item=>Number(item.count ?? item.value ?? 0) || 0);
+      }
+
+      if(!tagDist.length){
+        __tagLabels = ['No tags'];
+        __tagValues = [1];
+      }else{
+        __tagLabels = tagDist.map(item=>item.tag || item.name || 'No Tags');
+        __tagValues = tagDist.map(item=>Number(item.count ?? item.value ?? 0) || 0);
+      }
+
+      renderCollections(__collLabels, __collValues, __tagLabels, __tagValues);
+    }catch(e){
+      console.warn('Collections error:', e);
+      __collLabels = ['No data'];
+      __collValues = [1];
+      __tagLabels = ['No tags'];
+      __tagValues = [1];
+      renderCollections(__collLabels, __collValues, __tagLabels, __tagValues);
+    }
+  }
+
+  // Re-render pie quando a largura muda muito (breakpoints)
+  let __collResizeTimer = null;
+  window.addEventListener('resize', ()=>{
+    if(__collResizeTimer) clearTimeout(__collResizeTimer);
+    __collResizeTimer = setTimeout(()=>{ renderCollections(__collLabels, __collValues, __tagLabels, __tagValues); }, 200);
+  });
+
+  /* ---------- KPIs (usando workers Shopify) ---------- */
+  const KPI_TOTAL_BASE  = 'https://01-shopify-sales-and-trands-kpi-total-sales.lucas-def.workers.dev';
+  const KPI_AOV_BASE    = 'https://02-shopify-kpi-average-order-value.lucas-def.workers.dev';
+  const KPI_TX_BASE     = 'https://03-shopify-kpi-number-of-transactions.lucas-def.workers.dev';
+  const KPI_MARGIN_BASE = 'https://04-shopify-kpi-gross-margin.lucas-def.workers.dev';
+
+  function getSalesKpiUrl(days){
+    if(days === 7)  return `${KPI_TOTAL_BASE}/sales7days`;
+    if(days === 90) return `${KPI_TOTAL_BASE}/sales90days`;
+    if(days === 30) return `${KPI_TOTAL_BASE}/sales30days`;
+    return `${KPI_TOTAL_BASE}/salesany`;
+  }
+
+  function getAovUrl(days){
+    const d = (days === 7 || days === 30 || days === 90) ? String(days) : 'any';
+    return `${KPI_AOV_BASE}/aov?days=${encodeURIComponent(d)}`;
+  }
+
+  function getTxUrl(days){
+    if(days === 7)  return `${KPI_TX_BASE}/transactions7days`;
+    if(days === 30) return `${KPI_TX_BASE}/transactions30days`;
+    if(days === 90) return `${KPI_TX_BASE}/transactions90days`;
+    return `${KPI_TX_BASE}/transactionsany`;
+  }
+
+  function getMarginUrl(days){
+    if(days === 7)  return `${KPI_MARGIN_BASE}/grossmargin7days`;
+    if(days === 30) return `${KPI_MARGIN_BASE}/grossmargin30days`;
+    if(days === 90) return `${KPI_MARGIN_BASE}/grossmargin90days`;
+    return `${KPI_MARGIN_BASE}/grossmarginany`;
+  }
+
+  function setKpiElements(kpis, days){
+    const totalEl  = document.getElementById('kpi-total');
+    const aovEl    = document.getElementById('kpi-aov');
+    const txEl     = document.getElementById('kpi-transactions');
+    const marginEl = document.getElementById('kpi-margin');
+
+    // Aliases for new value IDs
+    const totalAliasEl = document.getElementById('kpi-total-sales-value');
+    const aovAliasEl   = document.getElementById('kpi-aov-value');
+    const txAliasEl    = document.getElementById('kpi-tx-orders');
+    const gmAliasEl    = document.getElementById('kpi-gm-value');
+
+    const totalSubEl  = document.getElementById('kpi-total-sub');
+    const aovSubEl    = document.getElementById('kpi-aov-sub');
+    const txSubEl     = document.getElementById('kpi-transactions-sub');
+    const marginSubEl = marginEl ? marginEl.parentElement.querySelector('.kpi-sub') : null;
+
+    const rangeLabel = kpis.rangeLabel || (days ? `${days} days` : 'period');
+
+    const totalSales = Number.isFinite(kpis.totalSales) ? kpis.totalSales : NaN;
+    const aov        = Number.isFinite(kpis.aov)        ? kpis.aov        : NaN;
+    const tx         = Number.isFinite(kpis.tx)         ? kpis.tx         : NaN;
+    const margin     = kpis.margin ?? null;
+
+    const currency = kpis.currency || 'USD';
+    const formatter = (n)=>{
+      if(!Number.isFinite(n)) return '—';
+      try{ return new Intl.NumberFormat('en-US',{style:'currency',currency}).format(Number(n)); }
+      catch(_){ return `$${Number(n).toFixed(2)}`; }
+    };
+
+    if(totalEl) totalEl.textContent = formatter(totalSales);
+    if(aovEl)   aovEl.textContent   = formatter(aov);
+    if(txEl)    txEl.textContent    = Number.isFinite(tx) ? tx : '—';
+    if(marginEl){
+      if(typeof margin === 'string')      marginEl.textContent = margin;
+      else if(Number.isFinite(margin))    marginEl.textContent = `${Number(margin).toFixed(1)}%`;
+      else                                marginEl.textContent = '—';
+    }
+
+    // Populate alias value elements if present
+    if(totalAliasEl) totalAliasEl.textContent = formatter(totalSales);
+    if(aovAliasEl)   aovAliasEl.textContent   = formatter(aov);
+    if(txAliasEl)    txAliasEl.textContent    = Number.isFinite(tx) ? `${tx} Orders` : '—';
+    if(gmAliasEl){
+      if(typeof margin === 'string')      gmAliasEl.textContent = margin;
+      else if(Number.isFinite(margin))    gmAliasEl.textContent = `${Number(margin).toFixed(1)}%`;
+      else                                gmAliasEl.textContent = '—';
+    }
+
+    if(totalSubEl){
+      const change = kpis.salesChange;
+      if(change){ totalSubEl.textContent = `${change} vs previous period`; }
+      else if(Number.isFinite(tx)) totalSubEl.textContent = `↑ ${tx} orders in last ${rangeLabel}`;
+      else totalSubEl.textContent = `↑ Performance for last ${rangeLabel}`;
+    }
+    if(aovSubEl){
+      const change = kpis.aovChange;
+      if(change){ aovSubEl.textContent = `${change} vs previous period`; }
+      else if(Number.isFinite(tx)) aovSubEl.textContent = `↑ Based on ${tx} transactions`;
+      else aovSubEl.textContent = `↑ Average per order in last ${rangeLabel}`;
+    }
+    if(txSubEl){
+      txSubEl.textContent = kpis.txMessage ? kpis.txMessage : `↑ Transactions in last ${rangeLabel}`;
+    }
+    if(marginSubEl){
+      if(kpis.marginNote)      marginSubEl.textContent = kpis.marginNote;
+      else if(kpis.marginChange) marginSubEl.textContent = `${kpis.marginChange} vs previous period`;
+      else                     marginSubEl.textContent = 'Gross margin for last '+rangeLabel;
+      marginSubEl.style.color = '#9ca3af';
+    }
+  }
+
+  function deltaClass(changeStr, trend){
+    if(trend === 'up') return 'delta-up';
+    if(trend === 'down') return 'delta-down';
+    if(typeof changeStr === 'string'){
+      if(changeStr.trim().startsWith('+')) return 'delta-up';
+      if(changeStr.trim().startsWith('-')) return 'delta-down';
+    }
+    return 'delta-flat';
+  }
+
+  function renderKpiDetails(kpis){
+    const tsDetails = document.getElementById('kpi-total-sales-details');
+    const aovDetails = document.getElementById('kpi-aov-details');
+    const txDetails = document.getElementById('kpi-tx-details');
+    const gmDetails = document.getElementById('kpi-gm-details');
+
+    const currency = kpis.currency || 'USD';
+    const fmt = (n)=>{
+      if(n === null || n === undefined || n === '') return '—';
+      const num = Number(n);
+      if(!Number.isFinite(num)) return `$${n}`;
+      try{ return new Intl.NumberFormat('en-US',{style:'currency',currency}).format(num); }
+      catch(_){ return `$${num.toFixed(2)}`; }
+    };
+
+    // Helper for arrow by trend
+    const arrow = (t)=> t==='up' ? '↑' : (t==='down' ? '↓' : '→');
+
+    // Total Sales
+    if(tsDetails){
+      const cls = deltaClass(kpis.salesChange, kpis.salesTrend);
+      tsDetails.innerHTML = `
+        Prev: ${fmt(kpis.previousTotalSales)} <span class="${cls}">${kpis.salesChange || ''} ${arrow(kpis.salesTrend)}</span><br>
+        Orders: ${Number.isFinite(kpis.salesOrders) ? kpis.salesOrders : '—'} · AOV: ${fmt(kpis.salesAov)}<br>
+        Avg Weekly Growth: ${kpis.avgWeeklyGrowth || '—'}
+      `;
+    }
+
+    // AOV
+    if(aovDetails){
+      const cls = deltaClass(kpis.aovChange, kpis.aovTrend);
+      aovDetails.innerHTML = `
+        Prev AOV: ${fmt(kpis.previousAov)} <span class="${cls}">${kpis.aovChange || ''} ${arrow(kpis.aovTrend)}</span><br>
+        Orders: ${Number.isFinite(kpis.aovOrders) ? kpis.aovOrders : '—'} · Sales: ${fmt(kpis.aovSales)}
+      `;
+    }
+
+    // Transactions
+    if(txDetails){
+      const cls = deltaClass(kpis.txChange, kpis.txTrend);
+      txDetails.innerHTML = `
+        Prev Orders: ${Number.isFinite(kpis.previousOrders) ? kpis.previousOrders : '—'} <span class="${cls}">${kpis.txChange || ''} ${arrow(kpis.txTrend)}</span><br>
+        Total Sales: ${fmt(kpis.txSales)}<br>
+        Period: ${kpis.txMessage || '—'}
+      `;
+    }
+
+    // Gross Margin
+    if(gmDetails){
+      const cls = deltaClass(kpis.marginChange, kpis.marginTrend);
+      gmDetails.innerHTML = `
+        Profit: ${fmt(kpis.grossProfit)} · COGS: ${fmt(kpis.totalCogs)}<br>
+        Prev Margin: ${kpis.previousMargin || '—'} <span class="${cls}">${kpis.marginChange || ''} ${arrow(kpis.marginTrend)}</span><br>
+        ${kpis.marginNote || ''}
+      `;
+    }
+  }
+
+  async function loadKpis(days){
+    try{
+      const [salesRes, aovRes, txRes, marginRes] = await Promise.all([
+        fetch(getSalesKpiUrl(days), { cache:'no-store' }),
+        fetch(getAovUrl(days),      { cache:'no-store' }),
+        fetch(getTxUrl(days),       { cache:'no-store' }),
+        fetch(getMarginUrl(days),   { cache:'no-store' })
+      ]);
+
+      const salesJson  = salesRes.ok  ? await salesRes.json()  : null;
+      const aovJson    = aovRes.ok    ? await aovRes.json()    : null;
+      const txJson     = txRes.ok     ? await txRes.json()     : null;
+      const marginJson = marginRes.ok ? await marginRes.json() : null;
+
+      const kpis = {
+        totalSales: salesJson
+          ? Number(salesJson.total_sales ?? salesJson.totalSales ?? salesJson.total ?? NaN)
+          : NaN,
+        aov: aovJson
+          ? Number(aovJson.average_order_value ?? aovJson.aov ?? NaN)
+          : NaN,
+        tx: txJson
+          ? Number(txJson.total_orders ?? txJson.orders ?? txJson.totalOrders ?? NaN)
+          : NaN,
+        margin: marginJson
+          ? (marginJson.gross_margin ?? marginJson.margin ?? null)
+          : null,
+        // Context & ranges
+        currency:     salesJson?.currency || aovJson?.currency || txJson?.currency || marginJson?.currency || 'USD',
+        rangeLabel:   salesJson?.range || aovJson?.range || txJson?.range || marginJson?.range || null,
+        // Total Sales extras
+        previousTotalSales: salesJson?.previous_total_sales || null,
+        salesChange:        salesJson?.change_vs_previous || null,
+        salesTrend:         salesJson?.trend || null,
+        avgWeeklyGrowth:    salesJson?.avg_weekly_growth || null,
+        salesOrders:        Number(salesJson?.total_orders ?? NaN),
+        salesAov:           salesJson?.average_order_value || null,
+        // AOV extras
+        previousAov:        aovJson?.previous_aov || null,
+        aovChange:          aovJson?.change_vs_previous || null,
+        aovTrend:           aovJson?.trend || null,
+        aovOrders:          Number(aovJson?.total_orders ?? NaN),
+        aovSales:           aovJson?.total_sales || null,
+        // Transactions extras
+        txMessage:          txJson?.message || null,
+        previousOrders:     Number(txJson?.previous_orders ?? NaN),
+        txChange:           txJson?.change_vs_previous || null,
+        txTrend:            txJson?.trend || null,
+        txSales:            txJson?.total_sales || null,
+        // Margin extras
+        grossProfit:        marginJson?.gross_profit || null,
+        totalCogs:          marginJson?.total_cogs || null,
+        previousMargin:     marginJson?.previous_margin || null,
+        marginChange:       marginJson?.change_vs_previous || null,
+        marginTrend:        marginJson?.trend || null,
+        marginNote:         marginJson?.note || null
+      };
+
+      setKpiElements(kpis, days);
+      renderKpiDetails(kpis);
+    }catch(e){
+      console.warn('KPI load error:', e);
+      setKpiElements({}, days);
+      renderKpiDetails({});
+    }
+  }
+
+  /* ---------- START DASHBOARD ---------- */
+  function startDash(){
+    loadKpis(30);
     load(30);
-    // carrega os novos gráficos inferiores de forma ociosa p/ conexões lentas
     const idle = window.requestIdleCallback || ((fn)=>setTimeout(fn, 500));
-    idle(()=>{ loadTopSellers(); loadCollections(); });
-  </script>
+    idle(()=>{ loadTopSellers(currentDays); loadCollections(); });
+  }
+  function waitLibsAndStart(){
+    if(window.Chart && window.echarts){ startDash(); }
+    else { setTimeout(waitLibsAndStart, 60); }
+  }
+  window.addEventListener('load', waitLibsAndStart);
+</script>
+
+
+
+
 </body>
 </html>
